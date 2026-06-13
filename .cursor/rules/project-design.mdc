@@ -1,0 +1,12 @@
+---
+description: Reglas de fase de diseño del proyecto Gastos Web
+alwaysApply: true
+---
+
+# Finanzas Web — proyecto
+
+- Leer `AGENTS.md` al inicio de cada sesión.
+- Planning **cerrado** (2025-06-13): ver `docs/design/planning.md` antes de implementar.
+- Decisiones de DATOS: solo el usuario. Preguntar; documentar en `docs/standards/data-decisions.md`.
+- NO discutir tecnología de front con el usuario.
+- Todo servicio nuevo: Docker Compose.
