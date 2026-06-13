@@ -1,6 +1,23 @@
 name: nocodb
 
 services:
+  web:
+    build:
+      context: ../front
+      dockerfile: Dockerfile
+    depends_on:
+      nocodb:
+        condition: service_started
+    container_name: finance-web
+    environment:
+      NOCODB_URL: http://nocodb:8080
+      NOCODB_API_TOKEN: ${NOCODB_API_TOKEN}
+      SESSION_SECRET: ${SESSION_SECRET}
+      TIMEZONE: ${TIMEZONE:-Europe/Madrid}
+    ports:
+      - "3001:3000"
+    restart: always
+
   nocodb:
     depends_on:
       root_db:
