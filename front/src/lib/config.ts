@@ -3,6 +3,7 @@ export const TABLES = {
   gastos: "myqcksevgehcvlp",
   ingresos: "mrr99jc3e3707n6",
   automaticActions: "mugm6tw1ail68rq",
+  importRules: "mo7uf7o396lxp59",
 } as const;
 
 export function getSessionSecret(): string {

@@ -31,6 +31,13 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+worker/.venv/
+
+# Exports bancarios reales (muestras locales)
+worker/samples/**/*.csv
+worker/samples/**/*.xlsx
+worker/samples/**/*.xls
+!worker/tests/fixtures/**
 
 # Sistema operativo
 .DS_Store

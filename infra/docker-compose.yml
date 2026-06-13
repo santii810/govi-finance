@@ -18,6 +18,22 @@ services:
       - "3001:3000"
     restart: always
 
+  bot:
+    build:
+      context: ../worker
+      dockerfile: Dockerfile
+    depends_on:
+      nocodb:
+        condition: service_started
+    container_name: finance-bot
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_ALLOWED_USER_IDS: ${TELEGRAM_ALLOWED_USER_IDS:-}
+      NOCODB_URL: http://nocodb:8080
+      NOCODB_API_TOKEN: ${NOCODB_API_TOKEN}
+      AUTOMATIC_ACTIONS_TABLE_ID: mugm6tw1ail68rq
+    restart: always
+
   nocodb:
     depends_on:
       root_db:

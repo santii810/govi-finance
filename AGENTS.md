@@ -59,10 +59,11 @@ Ver `docs/design/planning.md` para resumen y fases sugeridas.
 | Inserción manual    | **+ Insertar** → desplegable de tablas → formulario según tabla (Gastos, Ingresos, futuras). `04-manual-insert.md` |
 
 ### Pipeline bancario (acordado en conversación)
-- Bot (Telegram o similar) recibe exports de **N bancos**.
-- **Worker** → inserta en **AutomaticActions** (NocoDB, tabla `mugm6tw1ail68rq`).
+- Bot (Telegram o similar) recibe exports de **N bancos**; confirma **origen** antes de insertar.
+- **Worker** → parsea, detecta cuenta, inserta en **AutomaticActions** con **Metadatos** (NocoDB, tabla `mugm6tw1ail68rq`).
+- **Web** → aplica **ImportRules** (NocoDB) al mostrar el wizard; clasificación evoluciona con el uso.
 - Idempotencia (ADR-0006): `IdempotencyKey` solo en AutomaticActions.
-- Web: lista ágil + deshacer, sin recargas. ADR-0005, `03-wizard-automatic-actions.md`.
+- Web: lista ágil + deshacer, sin recargas. ADR-0005, `03-wizard-automatic-actions.md`, `07-bank-import-worker.md`.
 
 ### Homepage y dashboard
 

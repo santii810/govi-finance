@@ -1,0 +1,4 @@
+ID,Status,Timestamp,Type,Asset type,Name,Instrument,Shares,Rate,Realized yield,Realized PnL,Commission,Debit,Credit,Tax amount,Documents
+test-001,executed,12 Jun 25 10:00 +0200,Purchase,ETF,MSCI World,IE00BK1PV551,1,100,0,0,0,100,0,0,[]
+test-002,executed,10 Jun 25 14:30 +0200,Dividends,ETF,MSCI World,IE00BK1PV551,1,0,0,0,0,0,5.50,0,[]
+test-003,executed,01 Jun 25 09:00 +0200,Deposit,Cash,,,0,0,0,0,0,0,200,0,[]

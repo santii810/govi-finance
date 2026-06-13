@@ -1,7 +1,7 @@
 # Modelo de datos: AutomaticActions
 
 ## Estado
-Definido (2025-06-13) — tabla creada en NocoDB base **Gastos**.
+Definido (2025-06-13) — tabla creada en NocoDB base **Gastos**. Actualizado: campo **Metadatos** (2025-06-13).
 
 ## Propósito
 
@@ -34,11 +34,22 @@ importaciones del worker, su estado de revisión y trazabilidad para idempotenci
 | **Estado** | SingleSelect | Sí | No | `pending` \| `accepted` \| `modified` \| `ignored` |
 | **Fecha** | Date | Sí | No | Fecha del movimiento |
 | **Importe** | Currency (EUR) | Sí | No | Importe real del movimiento |
-| **Concepto** | SingleLineText | No | No | Descripción / concepto bancario |
-| **Banco** | SingleLineText | Sí | No | Banco de origen del export (ej. Abanca) |
-| **TablaDestino** | SingleSelect | Sí | No | Tabla propuesta: `Gastos`, `Ingresos`, … |
-| **Categoría** | SingleLineText | No | No | Propuesta del worker (misma lógica que Gastos.Categoría) |
-| **Persona** | SingleSelect | No | No | `Santi` \| `Sandra` \| `Común` — propuesta del worker |
+| **Concepto** | SingleLineText | No | No | Descripción / concepto bancario (del parseo) |
+| **Banco** | SingleLineText | Sí | No | Banco de origen del export |
+| **Persona** | SingleSelect | No | No | `Santi` \| `Sandra` \| `Común` — del catálogo de cuenta (YAML) |
+| **Metadatos** | JSON | No | No | Datos ricos del banco + `account_id`; ver abajo |
+| **TablaDestino** | SingleSelect | No | No | Propuesta de la **web** (ImportRules); vacío al insertar |
+| **Categoría** | SingleLineText | No | No | Propuesta de la **web** (ImportRules); vacío al insertar |
+
+### Metadatos (JSON)
+
+El worker rellena al insertar. La web lo usa para aplicar **ImportRules**.
+
+Campos típicos (Trade Republic y otros según parser):
+
+- `account_id` — id del catálogo YAML (`trade-republic-santi`)
+- `type`, `category`, `asset_class`, `name`, `symbol`, `mcc_code`
+- `fee`, `tax`, `description`, `counterparty_name`, `counterparty_iban`, …
 
 ### Campos sistema (NocoDB)
 `Id`, `CreatedAt`, `UpdatedAt`, `CreatedBy`, `UpdatedBy` — gestión estándar.
@@ -73,7 +84,14 @@ Tras salir de `pending`, la fila **permanece** en AutomaticActions (historial + 
 
 ### Worker → AutomaticActions
 ```
-export banco → parsear → clasificar → INSERT (Estado=pending, resto de campos)
+export → parsear → detectar cuenta → INSERT pending
+  (Fecha, Importe, Concepto, Banco, Persona, Metadatos, IdempotencyKey)
+  TablaDestino y Categoría vacíos — los rellena la web con ImportRules
+```
+
+### Web — ImportRules (al abrir wizard)
+```
+pending + Metadatos → cargar ImportRules → propuesta TablaDestino + Categoría (+ Persona si regla)
 ```
 
 ### Wizard → tabla destino
@@ -101,4 +119,6 @@ Deshacer            → revertir a pending (y borrar insert destino si aplica)
 - ADR-0005 (pipeline)
 - ADR-0006 (idempotencia)
 - `03-wizard-automatic-actions.md`
+- `07-bank-import-worker.md`
+- `08-import-rules.md`
 - `data-decisions.md`

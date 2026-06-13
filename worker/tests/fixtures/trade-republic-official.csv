@@ -1,0 +1,4 @@
+"datetime","date","account_type","category","type","asset_class","name","symbol","shares","price","amount","fee","tax","currency","original_amount","original_currency","fx_rate","description","transaction_id","counterparty_name","counterparty_iban","payment_reference","mcc_code"
+"2025-06-03T10:00:00Z","2025-06-03","DEFAULT","CASH","CARD_TRANSACTION","","WWW.AMAZON*","","","","-180.89","","","EUR","","","","TR Card Transaction","amazon-tx-001","","","","5942"
+"2025-06-01T08:00:00Z","2025-06-01","DEFAULT","CASH","INTEREST_PAYMENT","","","","","","0.09","","","EUR","","","","Interest payment Booking","interest-tx-001","","","",""
+"2025-06-02T08:00:00Z","2025-06-02","DEFAULT","TRADING","BUY","STOCK","Taiwan Semi","US8740391003","1","7","-7.00","","","EUR","","","","Savings plan execution","buy-tx-001","","","",""

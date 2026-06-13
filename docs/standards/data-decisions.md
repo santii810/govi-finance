@@ -48,6 +48,33 @@
 ### Pendiente
 - Mapeo al insertar en Ingresos desde wizard.
 
+### Pipeline bancario — catálogos (2025-06-13)
+- **Cuentas:** YAML en `worker/config/accounts.yaml`. Un export = una cuenta.
+- **Reglas (ImportRules):** tabla en NocoDB; **las aplica la web** al abrir el wizard, no el bot/worker.
+- Prioridad: reglas de cuenta > globales.
+- Regla global inicial sugerida en NocoDB: positivo = Ingresos, negativo = Gastos.
+- **Confirmación obligatoria** en bot antes de insertar en AutomaticActions.
+- Primera cuenta: `trade-republic-santi` (Trade Republic, personal, Santi).
+- Diseño: `docs/design/07-bank-import-worker.md`
+
+### Bot Telegram (2025-06-13)
+- Servicio Docker `bot` (`worker/`, imagen `nocodb-bot`).
+- Flujo: CSV → preview → confirmación → insert AutomaticActions.
+- Env: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_IDS`, `NOCODB_*`.
+- No aplica ImportRules al insertar.
+
+### ImportRules (2025-06-13)
+- Tabla **ImportRules** creada en NocoDB (`mo7uf7o396lxp59`).
+- Reglas de clasificación; las aplica la **web** al abrir el wizard.
+- Modelo: `docs/design/08-import-rules.md`.
+- Seed: 2 reglas globales (signo → Ingresos / Gastos, prioridad 0).
+
+### AutomaticActions — Metadatos (2025-06-13)
+- Campo **Metadatos** (JSON) añadido en NocoDB (`c7sy9p6eb0fd60f`).
+- Worker inserta datos ricos del parseo + `account_id`.
+- **TablaDestino** ya no es obligatorio al insertar (lo rellena la web vía ImportRules).
+- **Categoría** y **TablaDestino**: propuesta de la web, vacíos al importar.
+
 ## Estado actual en NocoDB
 
 | Tabla              | ID              | Campos negocio        |
@@ -55,6 +82,7 @@
 | Gastos             | myqcksevgehcvlp | Completos              |
 | Ingresos           | mrr99jc3e3707n6 | Persona añadida; 547 registros = Santi |
 | Users              | mwspabgn3fdm9ot | 2 usuarios (Santi, Sandra); bcrypt en PasswordHash |
-| **AutomaticActions** | mugm6tw1ail68rq | Creados |
+| **AutomaticActions** | mugm6tw1ail68rq | Completos + **Metadatos** (JSON) |
+| **ImportRules**      | mo7uf7o396lxp59 | 7 campos; 2 reglas globales seed |
 
 > Esquema objetivo en `05-automatic-actions.md`. Añadir campos: decisión/implementación del usuario o agente con su OK.

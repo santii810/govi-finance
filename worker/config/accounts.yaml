@@ -1,0 +1,9 @@
+accounts:
+  - id: trade-republic-santi
+    label: "Trade Republic — Santi (personal)"
+    banco: Trade Republic
+    tipo: personal
+    persona: Santi
+    parser: trade_republic
+    detection:
+      parser: trade_republic
