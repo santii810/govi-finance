@@ -56,3 +56,18 @@ async def test_import_movements_skips_existing():
     assert result.skipped == 1
     assert result.total == 2
     client.create_record.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_import_movements_skips_duplicate_keys_in_same_batch():
+    client = AsyncMock()
+    client.existing_idempotency_keys.return_value = set()
+    client.create_record.return_value = {"Id": 1}
+
+    movements = [_movement("dup"), _movement("dup"), _movement("other")]
+    result = await import_movements(client, "table1", movements)
+
+    assert result.inserted == 2
+    assert result.skipped == 1
+    assert result.total == 3
+    assert client.create_record.await_count == 2

@@ -1,6 +1,8 @@
 # Muestras de exports bancarios (gitignored)
 
-Los CSV reales **no se commitean** — contienen datos personales.
+Los exports reales **no se commitean** — contienen datos personales.
+
+Revolut y MyInvestor entregan **Excel** (a veces con extensión `.csv`). El worker los detecta por contenido.
 
 ## Trade Republic — Santi
 
@@ -10,10 +12,16 @@ Copia tu export aquí:
 worker/samples/trade-republic-santi/exportacion-transaccion.csv
 ```
 
-Origen habitual (Telegram / descargas):
+## Revolut — Santi
 
 ```
-Exportación de transacción.csv
+worker/samples/revolut-santi/
+```
+
+## MyInvestor — Santi
+
+```
+worker/samples/myinvestor-santi/
 ```
 
 ### Probar el análisis (sin insertar en NocoDB)

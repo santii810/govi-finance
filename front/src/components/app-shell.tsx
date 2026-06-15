@@ -1,10 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { DashboardGastos } from "@/components/dashboard-gastos";
+import { DashboardIngresos } from "@/components/dashboard-ingresos";
+import { DashboardInversiones } from "@/components/dashboard-inversiones";
+import { DashboardPatrimonio } from "@/components/dashboard-patrimonio";
+import { PendingTasksPanel } from "@/components/pending-tasks-panel";
 import type { SessionUser } from "@/lib/types";
 
-type Tab = "resumen" | "gastos" | "ingresos";
+type Tab = "resumen" | "gastos" | "ingresos" | "inversion" | "patrimonio" | "tareas";
 
 interface AppShellProps {
   user: SessionUser;
@@ -15,6 +20,24 @@ export function AppShell({ user, children }: AppShellProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("resumen");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [backupState, setBackupState] = useState<"idle" | "running" | "ok" | "error">("idle");
+  const [backupMessage, setBackupMessage] = useState("");
+
+  const fetchPendingCount = useCallback(async () => {
+    try {
+      const res = await fetch("/api/automatic-actions/pending");
+      if (!res.ok) return;
+      const json = (await res.json()) as { total?: number };
+      setPendingCount(json.total ?? 0);
+    } catch {
+      // badge opcional; no bloquear la UI
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPendingCount();
+  }, [fetchPendingCount]);
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -22,10 +45,32 @@ export function AppShell({ user, children }: AppShellProps) {
     router.refresh();
   }
 
-  const tabs: { id: Tab; label: string; disabled?: boolean }[] = [
+  async function handleBackup() {
+    setBackupState("running");
+    setBackupMessage("Exportando y subiendo a Drive…");
+    try {
+      const res = await fetch("/api/backup/run", { method: "POST" });
+      const json = (await res.json()) as { archive?: string; error?: string };
+      if (!res.ok) {
+        setBackupState("error");
+        setBackupMessage(json.error ?? "No se pudo completar el backup");
+        return;
+      }
+      setBackupState("ok");
+      setBackupMessage(`Listo: ${json.archive ?? "backup subido"}`);
+    } catch {
+      setBackupState("error");
+      setBackupMessage("Error de conexión con el servicio de backup");
+    }
+  }
+
+  const tabs: { id: Tab; label: string; disabled?: boolean; badge?: number }[] = [
     { id: "resumen", label: "Resumen" },
-    { id: "gastos", label: "Gastos", disabled: true },
-    { id: "ingresos", label: "Ingresos", disabled: true },
+    { id: "gastos", label: "Gastos" },
+    { id: "ingresos", label: "Ingresos" },
+    { id: "inversion", label: "Inversión" },
+    { id: "patrimonio", label: "Patrimonio" },
+    { id: "tareas", label: "Tareas", badge: pendingCount > 0 ? pendingCount : undefined },
   ];
 
   return (
@@ -43,14 +88,15 @@ export function AppShell({ user, children }: AppShellProps) {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              disabled
-              title="Próximamente (fase 2)"
-              className="relative rounded-lg border border-border px-3 py-1.5 text-sm text-muted opacity-60"
+              onClick={() => setActiveTab("tareas")}
+              className="relative rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-background"
             >
               Tareas
-              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-medium text-white">
-                0
-              </span>
+              {pendingCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-medium text-white">
+                  {pendingCount}
+                </span>
+              )}
             </button>
 
             <button
@@ -71,7 +117,30 @@ export function AppShell({ user, children }: AppShellProps) {
                 {user.username} ▾
               </button>
               {menuOpen && (
-                <div className="absolute right-0 mt-1 w-40 rounded-lg border border-border bg-card py-1 shadow-lg">
+                <div className="absolute right-0 mt-1 w-56 rounded-lg border border-border bg-card py-1 shadow-lg">
+                  <div className="border-b border-border px-4 py-2">
+                    <p className="text-xs font-medium text-muted">Backup</p>
+                    <p className="mt-1 text-xs text-muted">
+                      Exporta NocoDB y sube a Google Drive.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={backupState === "running"}
+                      onClick={handleBackup}
+                      className="mt-2 w-full rounded-md border border-border px-3 py-1.5 text-left text-sm hover:bg-background disabled:opacity-60"
+                    >
+                      {backupState === "running" ? "Lanzando backup…" : "Lanzar backup"}
+                    </button>
+                    {backupMessage && (
+                      <p
+                        className={`mt-2 text-xs ${
+                          backupState === "error" ? "text-red-600" : "text-muted"
+                        }`}
+                      >
+                        {backupMessage}
+                      </p>
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={handleLogout}
@@ -92,7 +161,7 @@ export function AppShell({ user, children }: AppShellProps) {
               type="button"
               disabled={tab.disabled}
               onClick={() => !tab.disabled && setActiveTab(tab.id)}
-              className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+              className={`relative rounded-lg px-4 py-2 text-sm font-medium transition ${
                 activeTab === tab.id
                   ? "bg-accent text-white"
                   : tab.disabled
@@ -101,6 +170,11 @@ export function AppShell({ user, children }: AppShellProps) {
               }`}
             >
               {tab.label}
+              {tab.badge !== undefined && (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-medium text-white">
+                  {tab.badge}
+                </span>
+              )}
             </button>
           ))}
           <button
@@ -115,8 +189,15 @@ export function AppShell({ user, children }: AppShellProps) {
       </header>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
-        {activeTab === "resumen" ? children : (
-          <p className="text-sm text-muted">Este dashboard estará disponible en una fase posterior.</p>
+        {activeTab === "resumen" && children}
+        {activeTab === "ingresos" && <DashboardIngresos />}
+        {activeTab === "inversion" && <DashboardInversiones />}
+        {activeTab === "patrimonio" && <DashboardPatrimonio />}
+        {activeTab === "gastos" && <DashboardGastos />}
+        {activeTab === "tareas" && (
+          <PendingTasksPanel
+            onCountChange={setPendingCount}
+          />
         )}
       </main>
     </div>

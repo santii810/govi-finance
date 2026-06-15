@@ -11,6 +11,8 @@ _TR_FORMAT_ID = {"id", "timestamp", "type", "debit", "credit"}
 _TR_FORMAT_OFFICIAL = {"transaction_id", "date", "amount", "type", "category"}
 _TR_FORMAT_SIMPLE = {"date", "description", "amount"}
 
+from worker.parsers.common import is_excel_file
+
 _TYPE_LABELS = {
     "BUY": "Compra",
     "SELL": "Venta",
@@ -28,6 +30,8 @@ _TYPE_LABELS = {
 
 
 def can_parse(path: Path, content: str | None = None) -> bool:
+    if is_excel_file(path):
+        return False
     text = content if content is not None else path.read_text(encoding="utf-8-sig")
     headers = _read_headers(text)
     if _TR_FORMAT_ID.issubset(headers):

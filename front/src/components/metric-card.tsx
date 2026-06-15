@@ -4,11 +4,18 @@ import type { ResumenMetrics } from "@/lib/types";
 interface MetricCardProps {
   title: string;
   value: number;
-  previous: number;
+  previous?: number;
   tone?: "default" | "expense" | "income";
+  hideComparison?: boolean;
 }
 
-export function MetricCard({ title, value, previous, tone = "default" }: MetricCardProps) {
+export function MetricCard({
+  title,
+  value,
+  previous = 0,
+  tone = "default",
+  hideComparison = false,
+}: MetricCardProps) {
   const valueClass =
     tone === "expense" ? "text-expense" : tone === "income" ? "text-income" : "text-foreground";
 
@@ -16,7 +23,9 @@ export function MetricCard({ title, value, previous, tone = "default" }: MetricC
     <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
       <p className="text-sm font-medium text-muted">{title}</p>
       <p className={`mt-2 text-3xl font-semibold tracking-tight ${valueClass}`}>{formatEur(value)}</p>
-      <p className="mt-2 text-xs text-muted">Mes anterior: {formatEur(previous)}</p>
+      {!hideComparison && (
+        <p className="mt-2 text-xs text-muted">Mes anterior: {formatEur(previous)}</p>
+      )}
     </div>
   );
 }

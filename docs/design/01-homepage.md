@@ -12,7 +12,7 @@ Tras **iniciar sesión** con éxito. Es la pantalla principal de la aplicación.
 ┌─────────────────────────────────────────────────────────────────┐
 │  [Logo]  Finanzas        [🔔 Tareas 3]  [+ Insertar]  [Usuario ▾]│
 ├─────────────────────────────────────────────────────────────────┤
-│  [ Resumen ]  [ Gastos ]  [ Ingresos ]  [ + ]                  │
+│  [ Resumen ]  [ Gastos ]  [ Ingresos ]  [🔔 Tareas 3]  [ + ]   │
 ├─────────────────────────────────────────────────────────────────┤
 │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐         │
 │   │ Balance mes  │  │ Gastos mes   │  │ Ingresos mes │         │
@@ -31,7 +31,7 @@ Tras **iniciar sesión** con éxito. Es la pantalla principal de la aplicación.
 | Elemento            | Comportamiento                                      |
 |---------------------|-----------------------------------------------------|
 | Logo / título       | **Finanzas** — identidad de la app; click → dashboard inicial |
-| Tareas pendientes   | Badge con número; click → wizard de tareas          |
+| Tareas pendientes   | Badge con número; click → activa la pestaña «Tareas» (fullwidth) |
 | Insertar            | Click → formulario inserción manual                 |
 | Usuario             | Menú: perfil, cerrar sesión (detalle por definir) |
 

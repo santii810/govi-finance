@@ -8,5 +8,7 @@ alwaysApply: true
 - Leer `AGENTS.md` al inicio de cada sesión.
 - Planning **cerrado** (2025-06-13): ver `docs/design/planning.md` antes de implementar.
 - Decisiones de DATOS: solo el usuario. Preguntar; documentar en `docs/standards/data-decisions.md`.
+- Migración histórica Excel: `docs/design/10-excel-migration.md` y CLI `worker import-excel`.
 - NO discutir tecnología de front con el usuario.
 - Todo servicio nuevo: Docker Compose.
+- Tras cambios en `front/`: rebuildear web (`docker compose up -d --build web`) — ver `AGENTS.md`.

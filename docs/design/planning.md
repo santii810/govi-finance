@@ -11,6 +11,10 @@
 |---|------|--------|-----------|
 | 6 | Wizard AutomaticActions | Aprobado | `03-wizard-automatic-actions.md` |
 | 8 | Modelo AutomaticActions | **Definido** | `05-automatic-actions.md` |
+| 9 | Dashboard Inversión | **Aprobado** | `09-dashboard-inversiones.md` |
+| 10 | Dashboard Patrimonio | **Aprobado** | `10-dashboard-patrimonio.md` |
+| 11 | Dashboard Gastos | **Aprobado** | `11-dashboard-gastos.md` |
+| 12 | Reglas clasificación | **Aprobado** | `12-reglas-clasificacion.md` |
 
 ---
 
@@ -29,4 +33,4 @@
 2. **AutomaticActions** — campos en NocoDB + wizard
 3. Inserción manual
 4. Worker + bot
-5. Más dashboards
+5. Más dashboards — **Gastos** listo (`11-dashboard-gastos.md`, plan `plans/2026-06-15-dashboard-gastos.md`)

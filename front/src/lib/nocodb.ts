@@ -36,7 +36,7 @@ export class NocoDbClient {
     return res.json() as Promise<T>;
   }
 
-  async listRecords(tableId: string, where?: string): Promise<NocoRecord[]> {
+  async listRecords(tableId: string, where?: string, fields?: string[]): Promise<NocoRecord[]> {
     const records: NocoRecord[] = [];
     let page = 1;
     const pageSize = 500;
@@ -47,6 +47,7 @@ export class NocoDbClient {
         offset: String((page - 1) * pageSize),
       });
       if (where) params.set("where", where);
+      if (fields?.length) params.set("fields", fields.join(","));
 
       const data = await this.request<{ list: NocoRecord[]; pageInfo: { isLastPage: boolean } }>(
         `/api/v2/tables/${tableId}/records?${params}`,
@@ -68,5 +69,37 @@ export class NocoDbClient {
     return (
       data.list.find((row) => String(row.Username ?? "").toLowerCase() === normalized) ?? null
     );
+  }
+
+  async getTableMeta(tableId: string): Promise<{ columns?: { title: string; colOptions?: { options?: { title?: string }[] } }[] }> {
+    return this.request(`/api/v2/meta/tables/${tableId}`);
+  }
+
+  async getRecord(tableId: string, id: string): Promise<NocoRecord | null> {
+    const data = await this.request<{ list: NocoRecord[] }>(
+      `/api/v2/tables/${tableId}/records?where=(Id,eq,${id})&limit=1`,
+    );
+    return data.list[0] ?? null;
+  }
+
+  async createRecord(tableId: string, fields: NocoRecord): Promise<NocoRecord> {
+    return this.request(`/api/v2/tables/${tableId}/records`, {
+      method: "POST",
+      body: JSON.stringify(fields),
+    });
+  }
+
+  async updateRecord(tableId: string, id: string, fields: NocoRecord): Promise<void> {
+    await this.request(`/api/v2/tables/${tableId}/records`, {
+      method: "PATCH",
+      body: JSON.stringify({ Id: id, ...fields }),
+    });
+  }
+
+  async deleteRecord(tableId: string, id: string): Promise<void> {
+    await this.request(`/api/v2/tables/${tableId}/records`, {
+      method: "DELETE",
+      body: JSON.stringify([{ Id: id }]),
+    });
   }
 }

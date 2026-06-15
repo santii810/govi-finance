@@ -2,6 +2,8 @@ export const TABLES = {
   users: "mwspabgn3fdm9ot",
   gastos: "myqcksevgehcvlp",
   ingresos: "mrr99jc3e3707n6",
+  inversiones: "mwnd0d416iwzwv6",
+  patrimonio: "mimdsus64el2tnl",
   automaticActions: "mugm6tw1ail68rq",
   importRules: "mo7uf7o396lxp59",
 } as const;
@@ -31,4 +33,16 @@ export function getAppConfig() {
     sessionSecret: getSessionSecret(),
     timezone: process.env.TIMEZONE ?? "Europe/Madrid",
   };
+}
+
+export function getBackupConfig() {
+  const backupUrl = (process.env.BACKUP_MANAGER_URL ?? "http://backup-manager:8090").replace(
+    /\/$/,
+    "",
+  );
+  const triggerSecret = process.env.BACKUP_TRIGGER_SECRET ?? "";
+  if (!triggerSecret) {
+    throw new Error("BACKUP_TRIGGER_SECRET is required");
+  }
+  return { backupUrl, triggerSecret };
 }

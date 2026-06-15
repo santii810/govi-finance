@@ -7,3 +7,21 @@ accounts:
     parser: trade_republic
     detection:
       parser: trade_republic
+
+  - id: revolut-santi
+    label: "Revolut — Santi (personal)"
+    banco: Revolut
+    tipo: personal
+    persona: Santi
+    parser: revolut
+    detection:
+      parser: revolut
+
+  - id: myinvestor-santi
+    label: "MyInvestor — Santi (personal)"
+    banco: MyInvestor
+    tipo: personal
+    persona: Santi
+    parser: myinvestor
+    detection:
+      parser: myinvestor

@@ -61,5 +61,5 @@ Gráfico de **barras agrupadas** con los **últimos 12 meses** calendario.
 
 ## Referencias
 - Shell general: `01-homepage.md`
-- Canvas: `homepage-v0`
+- Canvas: `homepage-v0` → `docs/design/canvases/homepage-v0.canvas.tsx`
 - Reglas Persona y 50%: ADR-0004

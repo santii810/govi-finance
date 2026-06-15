@@ -11,7 +11,7 @@ En diseño / implementación inicial (2025-06-13). Actualizado: ImportRules en w
    - **Cuentas** → `worker/config/accounts.yaml` (repo)
    - **Reglas (ImportRules)** → tabla en NocoDB — **las aplica la web**, no el worker
 4. **Worker:** parseo, origen, idempotencia, `Metadatos` JSON.
-5. **Web:** ImportRules → propuesta de `TablaDestino`, `Categoría`, overrides de `Persona`.
+5. **Web:** ImportRules → propuesta de `TablaDestino`, `Categoría`, overrides de `Persona` (**en memoria**, no columnas en AutomaticActions).
 
 ## Flujo
 
@@ -99,6 +99,8 @@ Ver `worker/README.md`.
 | Parser | Banco | Formatos soportados |
 |--------|-------|---------------------|
 | `trade_republic` | Trade Republic | Export oficial (`transaction_id`, `category`, `type`, …); CSV legacy |
+| `revolut` | Revolut | Excel (extracto cuenta; filas embebidas como CSV) |
+| `myinvestor` | MyInvestor | Excel (movimientos cuenta; fechas serial Excel) |
 
 Campos extraídos → **Metadatos** en AutomaticActions.
 

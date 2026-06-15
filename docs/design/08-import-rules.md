@@ -42,10 +42,10 @@ Las aplica la **web** al abrir el wizard (no el bot ni el worker).
 
 1. Filtrar reglas con `Activa = true`.
 2. Si `Alcance = account`, aplicar solo si `Cuenta` = `Metadatos.account_id` del movimiento.
-3. Ordenar por **Prioridad** descendente (reglas de cuenta suelen usar prioridad > global).
+3. Ordenar por **Prioridad** ascendente (menor primero, mayor al final).
 4. Aplicar **todas** las que coinciden, en orden (cada una puede sobreescribir la anterior).
 
-> En la práctica: reglas de cuenta con prioridad alta prevalecen sobre globales con prioridad 0.
+> En la práctica: reglas de prioridad alta (p. ej. 500, nombre exacto) se aplican **al final** y prevalecen sobre globales de signo (prioridad 0).
 
 ---
 
@@ -58,6 +58,7 @@ Referencia de implementación: `worker/src/worker/rules/engine.py` (portar a la 
 | `importe_positivo` | bool | `true` |
 | `importe_negativo` | bool | `true` |
 | `concepto_contiene` | string | `"AMAZON"` |
+| `concepto_exacto` | string | `"VANGUARD US 500 STOCK INDEX EU"` |
 | `type` / `tipo` | string | `"CARD_TRANSACTION"` |
 | `category` | string | `"TRADING"` |
 | `asset_class` | string | `"STOCK"` |
@@ -72,8 +73,11 @@ Entrada: `Concepto`, `Importe`, `Persona`, `Banco` + campos de **Metadatos** (Au
 
 | Clave | Valores | Descripción |
 |-------|---------|-------------|
-| `tabla_destino` | `Gastos` \| `Ingresos` | Tabla destino propuesta |
-| `categoria` | string | Categoría (misma lógica que Gastos) |
+| `tabla_destino` | `Gastos` \| `Ingresos` \| `Inversiones` | Tabla destino propuesta |
+| `categoria` | string | Categoría (destino Gastos) |
+| `tipo` | string | Tipo de inversión (destino Inversiones; ej. `Fondo indexado`) |
+| `nombre` | string | Nombre del activo (destino Inversiones; ej. `SP500`) |
+| `entidad` | string | Override de plataforma; vacío → heredar del banco/cuenta |
 | `persona` | `Santi` \| `Sandra` \| `Común` | Override de persona |
 | `importe_signo` | `positivo` \| `negativo` | Fuerza signo del importe (casos raros) |
 
@@ -85,6 +89,10 @@ Entrada: `Concepto`, `Importe`, `Persona`, `Banco` + campos de **Metadatos** (Au
 |----|--------|---------|-----------|-----------|----------|
 | 1 | Global — importe positivo → Ingresos | global | 0 | `{"importe_positivo": true}` | `{"tabla_destino": "Ingresos"}` |
 | 4 | Global — importe negativo → Gastos | global | 0 | `{"importe_negativo": true}` | `{"tabla_destino": "Gastos"}` |
+| — | Exacto — VANGUARD US 500 → SP500 | global | 500 | `{"concepto_exacto": "VANGUARD US 500 STOCK INDEX EU"}` | `{"tabla_destino": "Inversiones", "tipo": "Fondo indexado", "nombre": "SP500"}` |
+| — | Exacto — AMUNDI MSCI EM → MSCI EM | global | 500 | `{"concepto_exacto": "AMUNDI INDEX MSCI EMERG MKTS I"}` | `{"tabla_destino": "Inversiones", "tipo": "Fondo indexado", "nombre": "MSCI EM"}` |
+
+> Pantalla web para CRUD de reglas: `12-reglas-clasificacion.md`.
 
 ---
 

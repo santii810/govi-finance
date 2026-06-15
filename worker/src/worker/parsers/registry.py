@@ -2,17 +2,24 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from worker.parsers import trade_republic
+from openpyxl.utils.exceptions import InvalidFileException
+
+from worker.parsers import myinvestor, revolut, trade_republic
 
 PARSERS = {
     trade_republic.parser_name(): trade_republic,
+    revolut.parser_name(): revolut,
+    myinvestor.parser_name(): myinvestor,
 }
 
 
 def detect_parser(path: Path) -> str | None:
     for name, module in PARSERS.items():
-        if module.can_parse(path):
-            return name
+        try:
+            if module.can_parse(path):
+                return name
+        except (UnicodeDecodeError, OSError, InvalidFileException):
+            continue
     return None
 
 

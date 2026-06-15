@@ -44,9 +44,30 @@ class NocoDbClient:
     async def create_record(self, table_id: str, fields: dict[str, Any]) -> dict[str, Any]:
         return await self._request("POST", f"/api/v2/tables/{table_id}/records", json=fields)
 
-    async def update_record(self, table_id: str, record_id: int | str, fields: dict[str, Any]) -> dict[str, Any]:
-        payload = {"Id": record_id, **fields}
-        return await self._request("PATCH", f"/api/v2/tables/{table_id}/records", json=payload)
+    async def create_records(self, table_id: str, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if not records:
+            return []
+        data = await self._request("POST", f"/api/v2/tables/{table_id}/records", json=records)
+        if isinstance(data, list):
+            return data
+        return [data]
+
+    async def count_records(self, table_id: str) -> int:
+        data = await self._request(
+            "GET",
+            f"/api/v2/tables/{table_id}/records?limit=1&fields=Id",
+        )
+        return int(data.get("pageInfo", {}).get("totalRows", 0))
+
+    async def get_table_meta(self, table_id: str) -> dict[str, Any]:
+        return await self._request("GET", f"/api/v2/meta/tables/{table_id}")
+
+    async def list_base_tables(self, base_id: str) -> list[dict[str, Any]]:
+        data = await self._request("GET", f"/api/v2/meta/bases/{base_id}/tables")
+        return list(data.get("list", []))
+
+    async def patch_column(self, column_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._request("PATCH", f"/api/v2/meta/columns/{column_id}", json=body)
 
     async def existing_idempotency_keys(
         self,

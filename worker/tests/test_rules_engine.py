@@ -85,6 +85,74 @@ def test_account_rule_mcc_restaurant():
     assert result.categoria == "Restaurantes"
 
 
+def test_concepto_exacto_inversiones():
+    rules = [
+        NocoDbRule(
+            id="20",
+            scope="global",
+            account_id=None,
+            priority=500,
+            condition={"concepto_exacto": "VANGUARD US 500 STOCK INDEX EU"},
+            actions={
+                "tabla_destino": "Inversiones",
+                "tipo": "Fondo indexado",
+                "nombre": "SP500",
+            },
+        ),
+        NocoDbRule(
+            id="1",
+            scope="global",
+            account_id=None,
+            priority=0,
+            condition={"importe_positivo": True},
+            actions={"tabla_destino": "Ingresos"},
+        ),
+    ]
+    pending = _movement(200, type="TRADE")
+    pending.concepto = "VANGUARD US 500 STOCK INDEX EU"
+    result = apply_rules_to_pending(
+        pending,
+        account_id="trade-republic-santi",
+        nocodb_rules=rules,
+    )
+    assert result.tabla_destino == "Inversiones"
+    assert result.categoria is None
+
+
+def test_exact_rule_overrides_sign_rule_on_negative_importe():
+    """Prioridad 500 debe ganar a la regla de signo (0) aunque el importe sea negativo."""
+    rules = [
+        NocoDbRule(
+            id="4",
+            scope="global",
+            account_id=None,
+            priority=0,
+            condition={"importe_negativo": True},
+            actions={"tabla_destino": "Gastos"},
+        ),
+        NocoDbRule(
+            id="20",
+            scope="global",
+            account_id=None,
+            priority=500,
+            condition={"concepto_exacto": "VANGUARD US 500 STOCK INDEX EU"},
+            actions={
+                "tabla_destino": "Inversiones",
+                "tipo": "Fondo indexado",
+                "nombre": "SP500",
+            },
+        ),
+    ]
+    pending = _movement(-24.92)
+    pending.concepto = "VANGUARD US 500 STOCK INDEX EU"
+    result = apply_rules_to_pending(
+        pending,
+        account_id="trade-republic-santi",
+        nocodb_rules=rules,
+    )
+    assert result.tabla_destino == "Inversiones"
+
+
 def test_account_rule_does_not_apply_to_other_account():
     rules = [
         NocoDbRule(

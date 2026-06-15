@@ -38,22 +38,7 @@ docker compose up -d bot
 4. **Cancelar** → nada en BD
 5. **✎ Cuenta** → re-analizar con otra cuenta del catálogo (si hay varias)
 
-No aplica ImportRules — eso lo hace la web en el wizard.
-
-## Clasificador (ImportRules)
-
-Aplica las reglas de NocoDB a filas `pending` en AutomaticActions (misma lógica que la web):
-
-```bash
-cd worker
-pip install -e ".[dev]"
-export NOCODB_URL=http://localhost:23456
-export NOCODB_API_TOKEN=...
-python -m worker classify          # clasifica y persiste
-python -m worker classify --dry-run  # solo simula
-```
-
-Motor de reglas: `src/worker/rules/engine.py` (referencia compartida con `front/src/lib/import-rules/`).
+No aplica ImportRules — eso lo hace la web en el wizard (en memoria).
 
 ## CLI (parseo local)
 
@@ -62,6 +47,23 @@ cd worker
 pip install -e ".[dev]"
 python -m worker analyze samples/trade-republic-santi/exportacion.csv --message
 ```
+
+## Migración Excel → NocoDB
+
+Carga histórica desde `Finanzas.xlsx` (Gastos, Ingresos, Inversión, Patrimonio).
+
+```bash
+export NOCODB_URL=http://localhost:23456
+export NOCODB_API_TOKEN=...
+
+# Vista previa
+python -m worker import-excel ../Finanzas.xlsx --dry-run
+
+# Importar solo lo que falta (salta Ingresos si ya hay 547 filas)
+python -m worker import-excel ../Finanzas.xlsx --only gastos,inversiones,patrimonio
+```
+
+Spec completa: `docs/design/10-excel-migration.md`.
 
 ## Configuración
 

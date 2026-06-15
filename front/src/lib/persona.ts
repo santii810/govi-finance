@@ -40,6 +40,32 @@ export function formatEur(amount: number): string {
   }).format(amount);
 }
 
+export function yearKey(date: Date, timezone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+  }).formatToParts(date);
+  return parts.find((p) => p.type === "year")?.value ?? "0000";
+}
+
+export function monthIndex(date: Date, timezone: string): number {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    month: "numeric",
+  }).formatToParts(date);
+  return Number(parts.find((p) => p.type === "month")?.value ?? 1) - 1;
+}
+
+export function currentYearKey(timezone: string): string {
+  return yearKey(new Date(), timezone);
+}
+
+export function lastNYearsKeys(timezone: string, n: number): { from: string; to: string } {
+  const to = currentYearKey(timezone);
+  const from = String(Number(to) - n + 1);
+  return { from, to };
+}
+
 export function monthKey(date: Date, timezone: string): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,

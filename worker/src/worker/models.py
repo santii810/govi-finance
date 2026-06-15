@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Any, Literal
 
 Persona = Literal["Santi", "Sandra", "Común"]
-TablaDestino = Literal["Gastos", "Ingresos"]
+TablaDestino = Literal["Gastos", "Ingresos", "Inversiones"]
 AccountTipo = Literal["personal", "conjunta"]
 
 

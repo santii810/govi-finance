@@ -33,7 +33,7 @@
 
 ### Campo Categoría (2025-06-13)
 - Gastos: **Status** → **Categoría** (cat. + subcat. en un campo).
-- AutomaticActions usa el mismo campo **Categoría**.
+- En **AutomaticActions** no hay columna Categoría: la propuesta se calcula en memoria en el wizard.
 
 ### Auth con tabla Users (2025-06-13)
 - Tabla **Users** en NocoDB: `Username`, `PasswordHash`, `Persona` (Santi | Sandra).
@@ -45,8 +45,31 @@
 - Contraseña inicial acordada por el usuario; guardada solo como **PasswordHash** (bcrypt, cost 10). No texto plano en BD ni en repo.
 - IDs en BD: Santi = 2, Sandra = 3.
 
+### Tabla Inversiones (2026-06-14)
+- Nueva tabla **Inversiones** en NocoDB base Gastos.
+- Flujos de dinero: aportaciones (+) y retiros (−) hacia/desde inversiones.
+- Campos: **Entidad**, **Fecha**, **Nombre**, **Importe** (signo = dirección), **Tipo** (Fondo indexado, PIAS, Inmobiliario, Crypto…), **Persona**.
+- Renombrado acordado: campo histórico «Aportado» → **Importe**.
+- Dashboard: `docs/design/09-dashboard-inversiones.md`.
+- ID NocoDB: **mwnd0d416iwzwv6** (creada 2026-06-14).
+
+### Tabla Patrimonio (2026-06-15)
+- Nueva tabla **Patrimonio** en NocoDB base Gastos.
+- Snapshots de valor por entidad/tipo (dashboard `patrimonio-v0`).
+- Campos: **Entidad**, **Fecha**, **Nombre**, **Valor** (+ activo / − deuda), **Tipo**, **Persona**.
+- ID NocoDB: **mimdsus64el2tnl** (creada 2026-06-15).
+- Dashboard: `docs/design/10-dashboard-patrimonio.md`.
+- Importación histórica: hoja `Patrimonio` del Excel vía `import-excel`.
+
+### Migración Excel (2026-06-15)
+- Herramienta: `python -m worker import-excel Finanzas.xlsx` (`worker/`).
+- Hojas: `GastosExport`, `Ingresos`, `Inversión`, `Patrimonio`.
+- Spec: `docs/design/10-excel-migration.md`.
+- Ingresos ya cargados (547 = Santi). Gastos/Inversión/Patrimonio vía CLI.
+
 ### Pendiente
 - Mapeo al insertar en Ingresos desde wizard.
+- Importar datos históricos del usuario en Inversiones.
 
 ### Pipeline bancario — catálogos (2025-06-13)
 - **Cuentas:** YAML en `worker/config/accounts.yaml`. Un export = una cuenta.
@@ -69,11 +92,18 @@
 - Modelo: `docs/design/08-import-rules.md`.
 - Seed: 2 reglas globales (signo → Ingresos / Gastos, prioridad 0).
 
+### ImportRules — extensiones (2026-06-15)
+- Condición **`concepto_exacto`**: match literal del concepto (trim + case-insensitive).
+- Destino **`Inversiones`** en `tabla_destino`; acciones `tipo`, `nombre`, `entidad` (opcional).
+- Prioridad **500** para reglas de nombre exacto (prevalecen sobre signo global).
+- Pantalla **Gestionar reglas** dentro de pestaña Tareas (`12-reglas-clasificacion.md`).
+- Seed acordado: VANGUARD US 500 → SP500, AMUNDI MSCI EM → MSCI EM (Tipo: `Fondo indexado`).
+- Seed insertado en NocoDB (2026-06-15): IDs **5** y **6**.
+
 ### AutomaticActions — Metadatos (2025-06-13)
 - Campo **Metadatos** (JSON) añadido en NocoDB (`c7sy9p6eb0fd60f`).
 - Worker inserta datos ricos del parseo + `account_id`.
-- **TablaDestino** ya no es obligatorio al insertar (lo rellena la web vía ImportRules).
-- **Categoría** y **TablaDestino**: propuesta de la web, vacíos al importar.
+- **Clasificación en memoria:** la web aplica ImportRules al abrir el wizard; no hay columnas `TablaDestino` ni `Categoría` en AutomaticActions (eliminadas 2025-06-13).
 
 ## Estado actual en NocoDB
 
@@ -82,7 +112,9 @@
 | Gastos             | myqcksevgehcvlp | Completos              |
 | Ingresos           | mrr99jc3e3707n6 | Persona añadida; 547 registros = Santi |
 | Users              | mwspabgn3fdm9ot | 2 usuarios (Santi, Sandra); bcrypt en PasswordHash |
-| **AutomaticActions** | mugm6tw1ail68rq | Completos + **Metadatos** (JSON) |
+| **AutomaticActions** | mugm6tw1ail68rq | IdempotencyKey, Estado, Fecha, Importe, Concepto, Banco, Persona, **Metadatos** |
 | **ImportRules**      | mo7uf7o396lxp59 | 7 campos; 2 reglas globales seed |
+| **Inversiones**      | mwnd0d416iwzwv6 | Entidad, Fecha, Nombre, Importe, Tipo, Persona |
+| **Patrimonio**       | mimdsus64el2tnl | Entidad, Fecha, Nombre, Valor, Tipo, Persona |
 
 > Esquema objetivo en `05-automatic-actions.md`. Añadir campos: decisión/implementación del usuario o agente con su OK.

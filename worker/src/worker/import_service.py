@@ -14,14 +14,18 @@ async def import_movements(
     existing = await client.existing_idempotency_keys(table_id, keys)
 
     inserted = 0
+    skipped = 0
+    seen = set(existing)
     for movement in movements:
-        if movement.idempotency_key in existing:
+        if movement.idempotency_key in seen:
+            skipped += 1
             continue
         await client.create_record(table_id, movement_to_record(movement))
+        seen.add(movement.idempotency_key)
         inserted += 1
 
     return ImportResult(
         inserted=inserted,
-        skipped=len(existing),
+        skipped=skipped,
         total=len(movements),
     )

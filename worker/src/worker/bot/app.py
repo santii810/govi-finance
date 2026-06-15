@@ -22,6 +22,8 @@ from worker.models import ClassifiedMovement, ImportPreview
 from worker.nocodb import NocoDbClient, NocoDbError
 from worker.preview import analyze_file
 
+import httpx
+
 logger = logging.getLogger(__name__)
 
 SESSION_KEY = "import_session"
@@ -74,7 +76,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     _log_user(user)
     await update.message.reply_text(
-        "Envíame un export bancario (CSV).\n\n"
+        "Envíame un export bancario (CSV o Excel).\n\n"
         "Analizaré el fichero, te mostraré banco/cuenta/persona y fechas, "
         "y solo insertaré en Finanzas tras tu confirmación."
     )
@@ -92,8 +94,9 @@ async def document_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     document = message.document
     filename = document.file_name or "export.csv"
-    if not filename.lower().endswith(".csv"):
-        await message.reply_text("Solo acepto ficheros CSV.")
+    suffix = Path(filename).suffix.lower()
+    if suffix not in {".csv", ".xlsx", ".xls"}:
+        await message.reply_text("Solo acepto exports CSV o Excel (.csv, .xlsx).")
         return
 
     await message.reply_text("Recibido. Analizando…")
@@ -101,13 +104,25 @@ async def document_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     tg_file = await document.get_file()
     temp_dir = Path(tempfile.gettempdir()) / "finanzas-imports"
     temp_dir.mkdir(parents=True, exist_ok=True)
-    file_path = temp_dir / f"{user.id}_{document.file_unique_id}.csv"
+    file_path = temp_dir / f"{user.id}_{document.file_unique_id}{suffix or '.csv'}"
     await tg_file.download_to_drive(custom_path=str(file_path))
 
     try:
         preview, movements = analyze_file(file_path)
     except ValueError as exc:
         file_path.unlink(missing_ok=True)
+        await message.reply_text(f"No he podido analizar el fichero: {exc}")
+        return
+    except UnicodeDecodeError:
+        file_path.unlink(missing_ok=True)
+        await message.reply_text(
+            "No he podido leer el fichero como CSV de texto. "
+            "Si es un Excel, reenvíalo tal cual (aunque la extensión diga .csv)."
+        )
+        return
+    except Exception as exc:
+        file_path.unlink(missing_ok=True)
+        logger.exception("Error analizando fichero %s", filename)
         await message.reply_text(f"No he podido analizar el fichero: {exc}")
         return
 

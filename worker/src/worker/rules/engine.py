@@ -60,7 +60,7 @@ def apply_rules(
         for rule in nocodb_rules
         if rule.active and _rule_matches(rule, movement, account_id)
     ]
-    applicable.sort(key=lambda rule: rule.priority, reverse=True)
+    applicable.sort(key=lambda rule: rule.priority)
 
     for rule in applicable:
         classified = _apply_actions(classified, rule.actions)
@@ -102,6 +102,9 @@ def _rule_matches(rule: NocoDbRule, movement: RawMovement, account_id: str) -> b
         return False
     contains = condition.get("concepto_contiene")
     if contains and contains.lower() not in movement.concepto.lower():
+        return False
+    exact = condition.get("concepto_exacto")
+    if exact and movement.concepto.strip().lower() != str(exact).strip().lower():
         return False
     tx_type = condition.get("tipo") or condition.get("type")
     if tx_type and movement.metadata.get("type", "").lower() != str(tx_type).lower():

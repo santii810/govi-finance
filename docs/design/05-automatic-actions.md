@@ -1,7 +1,7 @@
 # Modelo de datos: AutomaticActions
 
 ## Estado
-Definido (2025-06-13) — tabla creada en NocoDB base **Gastos**. Actualizado: campo **Metadatos** (2025-06-13).
+Definido (2025-06-13) — tabla creada en NocoDB base **Gastos**. Actualizado: **Metadatos** (2025-06-13); sin columnas de clasificación en BD (2025-06-13).
 
 ## Propósito
 
@@ -22,7 +22,7 @@ importaciones del worker, su estado de revisión y trazabilidad para idempotenci
 | Table ID    | `mugm6tw1ail68rq`  |
 | Base        | Gastos (`pnf173not1wvzg0`) |
 
-> **Estado en NocoDB (2025-06-13):** campos de negocio creados vía API. `Title` legacy — no usar en la app.
+> **Estado en NocoDB (2025-06-13):** campos de negocio creados vía API. Columnas `Title`, `TablaDestino` y `Categoría` eliminadas — la clasificación no se persiste en esta tabla.
 
 ---
 
@@ -38,8 +38,6 @@ importaciones del worker, su estado de revisión y trazabilidad para idempotenci
 | **Banco** | SingleLineText | Sí | No | Banco de origen del export |
 | **Persona** | SingleSelect | No | No | `Santi` \| `Sandra` \| `Común` — del catálogo de cuenta (YAML) |
 | **Metadatos** | JSON | No | No | Datos ricos del banco + `account_id`; ver abajo |
-| **TablaDestino** | SingleSelect | No | No | Propuesta de la **web** (ImportRules); vacío al insertar |
-| **Categoría** | SingleLineText | No | No | Propuesta de la **web** (ImportRules); vacío al insertar |
 
 ### Metadatos (JSON)
 
@@ -54,8 +52,8 @@ Campos típicos (Trade Republic y otros según parser):
 ### Campos sistema (NocoDB)
 `Id`, `CreatedAt`, `UpdatedAt`, `CreatedBy`, `UpdatedBy` — gestión estándar.
 
-### Campo legacy
-`Title` — existe en la tabla creada; **no usar** en la lógica de la app (opcional eliminar en NocoDB).
+### Clasificación (no en BD)
+`TablaDestino`, `Categoría` y overrides de `Persona`/`Importe` por reglas se calculan **en memoria** en la web al abrir el wizard (ImportRules). No hay columnas en AutomaticActions para la propuesta.
 
 ---
 
@@ -86,12 +84,12 @@ Tras salir de `pending`, la fila **permanece** en AutomaticActions (historial + 
 ```
 export → parsear → detectar cuenta → INSERT pending
   (Fecha, Importe, Concepto, Banco, Persona, Metadatos, IdempotencyKey)
-  TablaDestino y Categoría vacíos — los rellena la web con ImportRules
 ```
 
-### Web — ImportRules (al abrir wizard)
+### Web — ImportRules (al abrir wizard, en memoria)
 ```
 pending + Metadatos → cargar ImportRules → propuesta TablaDestino + Categoría (+ Persona si regla)
+  (no se escribe en AutomaticActions; solo se muestra hasta Aceptar/Editar)
 ```
 
 ### Wizard → tabla destino

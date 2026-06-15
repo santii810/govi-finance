@@ -34,6 +34,14 @@ function mapIngresos(records: Record<string, unknown>[]): MoneyRecord[] {
   }));
 }
 
+function mapInversiones(records: Record<string, unknown>[]): MoneyRecord[] {
+  return records.map((r) => ({
+    date: parseDate(r.Fecha),
+    amount: attributedAmount(parseAmount(r.Importe), r.Persona),
+    persona: r.Persona,
+  }));
+}
+
 function computeMetrics(
   gastos: MoneyRecord[],
   ingresos: MoneyRecord[],
@@ -64,13 +72,15 @@ export async function fetchResumen(
 ): Promise<ResumenData> {
   const where = personaFilter(persona);
 
-  const [gastosRaw, ingresosRaw] = await Promise.all([
+  const [gastosRaw, ingresosRaw, inversionesRaw] = await Promise.all([
     client.listRecords(TABLES.gastos, where),
     client.listRecords(TABLES.ingresos, where),
+    client.listRecords(TABLES.inversiones, where),
   ]);
 
   const gastos = mapGastos(gastosRaw);
   const ingresos = mapIngresos(ingresosRaw);
+  const inversiones = mapInversiones(inversionesRaw);
   const metrics = computeMetrics(gastos, ingresos, timezone);
 
   const monthKeys = last12MonthKeys(timezone);
@@ -79,6 +89,7 @@ export async function fetchResumen(
     label: monthLabel(key),
     ingresos: sumInMonth(ingresos, key, timezone),
     gastos: sumInMonth(gastos, key, timezone),
+    inversion: sumInMonth(inversiones, key, timezone),
   }));
 
   return { metrics, chart };

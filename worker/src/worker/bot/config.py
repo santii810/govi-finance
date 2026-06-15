@@ -14,6 +14,8 @@ class BotConfig:
     nocodb_token: str
     automatic_actions_table_id: str
     allowed_user_ids: frozenset[int]
+    backup_manager_url: str
+    backup_trigger_secret: str
 
     @classmethod
     def from_env(cls) -> BotConfig:
@@ -38,6 +40,10 @@ class BotConfig:
                 "AUTOMATIC_ACTIONS_TABLE_ID", "mugm6tw1ail68rq"
             ),
             allowed_user_ids=allowed,
+            backup_manager_url=os.environ.get(
+                "BACKUP_MANAGER_URL", "http://backup-manager:8090"
+            ).rstrip("/"),
+            backup_trigger_secret=os.environ.get("BACKUP_TRIGGER_SECRET", "").strip(),
         )
 
 
