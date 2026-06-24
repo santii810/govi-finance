@@ -5,7 +5,9 @@ import logging
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse
 
+from backup_manager.progress import backup_progress
 from backup_manager.runner import run_backup_sync
 
 if TYPE_CHECKING:
@@ -20,13 +22,22 @@ class TriggerHandler(BaseHTTPRequestHandler):
     config: BackupConfig
     secret: str
 
-    def do_POST(self) -> None:  # noqa: N802
-        if self.path.rstrip("/") != "/backup":
+    def do_GET(self) -> None:  # noqa: N802
+        path = urlparse(self.path).path.rstrip("/")
+        if path != "/backup/status":
             self._respond(404, {"error": "not found"})
             return
+        if not self._authorized():
+            self._respond(401, {"error": "unauthorized"})
+            return
+        self._respond(200, backup_progress.snapshot().to_dict())
 
-        auth = self.headers.get("Authorization", "")
-        if auth != f"Bearer {self.secret}":
+    def do_POST(self) -> None:  # noqa: N802
+        path = urlparse(self.path).path.rstrip("/")
+        if path != "/backup":
+            self._respond(404, {"error": "not found"})
+            return
+        if not self._authorized():
             self._respond(401, {"error": "unauthorized"})
             return
 
@@ -34,23 +45,32 @@ class TriggerHandler(BaseHTTPRequestHandler):
             self._respond(409, {"error": "backup already running"})
             return
 
-        try:
-            archive = run_backup_sync(self.config)
-        except Exception as exc:
-            logger.exception("Backup manual fallido")
-            self._respond(500, {"error": str(exc)})
+        snapshot = backup_progress.snapshot()
+        if snapshot.running:
+            _backup_lock.release()
+            self._respond(409, {"error": "backup already running"})
             return
+
+        thread = threading.Thread(
+            target=self._run_backup,
+            args=(self.config,),
+            daemon=True,
+            name="backup-manual",
+        )
+        thread.start()
+        self._respond(202, {"ok": True, "started": True})
+
+    def _authorized(self) -> bool:
+        auth = self.headers.get("Authorization", "")
+        return auth == f"Bearer {self.secret}"
+
+    def _run_backup(self, config: BackupConfig) -> None:
+        try:
+            run_backup_sync(config)
+        except Exception:
+            logger.exception("Backup manual fallido")
         finally:
             _backup_lock.release()
-
-        self._respond(
-            200,
-            {
-                "ok": True,
-                "archive": archive.name,
-                "path": str(archive),
-            },
-        )
 
     def _respond(self, status: int, payload: dict[str, object]) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -75,5 +95,8 @@ def start_trigger_server(config: BackupConfig) -> ThreadingHTTPServer | None:
     server = ThreadingHTTPServer(("0.0.0.0", config.trigger_port), TriggerHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True, name="backup-trigger")
     thread.start()
-    logger.info("Trigger HTTP en :%s POST /backup", config.trigger_port)
+    logger.info(
+        "Trigger HTTP en :%s (POST /backup, GET /backup/status)",
+        config.trigger_port,
+    )
     return server

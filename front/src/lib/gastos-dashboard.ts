@@ -24,6 +24,7 @@ import type {
   GastosMove,
   GastosOverviewData,
   GastosNombreData,
+  GastosRankingMeal,
   GastosRestauracionData,
   GastosRankingSite,
   GastosSubTab,
@@ -406,13 +407,14 @@ function formatMoveDate(date: Date, timezone: string): string {
   }).format(date);
 }
 
-function topExpensiveMeals(records: GastoRecord[], timezone: string, limit = 10): NamedAmount[] {
+function topExpensiveMeals(records: GastoRecord[], timezone: string, limit = 10): GastosRankingMeal[] {
   return [...records]
     .sort((a, b) => b.amount - a.amount)
     .slice(0, limit)
     .map((r) => ({
       name: `${r.nombre} · ${formatMoveDate(r.date, timezone)}`,
       total: r.amount,
+      site: r.nombre,
     }));
 }
 

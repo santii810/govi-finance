@@ -50,6 +50,7 @@ def test_analyze_revolut_xlsx(tmp_path: Path):
 
     assert preview.account_id == "revolut-santi"
     assert preview.banco == "Revolut"
+    assert preview.ambiguedades
     assert preview.total_movimientos == 2
     assert preview.gastos_count == 1
     assert preview.ingresos_count == 1
@@ -58,6 +59,18 @@ def test_analyze_revolut_xlsx(tmp_path: Path):
     assert movements[0].importe == Decimal("-4.50")
     assert "Cafetería" in movements[0].concepto
     assert len(movements[0].idempotency_key) == 32
+
+
+def test_analyze_revolut_comun(tmp_path: Path):
+    sample = tmp_path / "revolut.csv"
+    _write_revolut_xlsx(sample)
+
+    preview, movements = analyze_file(sample, account_id="revolut-comun")
+
+    assert preview.account_id == "revolut-comun"
+    assert preview.persona == "Común"
+    assert preview.tipo_cuenta == "conjunta"
+    assert movements[0].persona == "Común"
 
 
 def test_analyze_myinvestor_xlsx(tmp_path: Path):

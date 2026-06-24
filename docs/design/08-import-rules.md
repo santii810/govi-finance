@@ -29,6 +29,7 @@ Las aplica la **web** al abrir el wizard (no el bot ni el worker).
 | Campo | Tipo NocoDB | Obligatorio | Descripción |
 |-------|-------------|-------------|-------------|
 | **Nombre** | SingleLineText | Sí | Etiqueta legible |
+| **Persona** | SingleSelect | Sí | `Santi` \| `Sandra` — propietario de la regla (personal, no compartida) |
 | **Activa** | Checkbox | Sí | Solo reglas activas se evalúan |
 | **Alcance** | SingleSelect | Sí | `global` \| `account` |
 | **Cuenta** | SingleLineText | No | `account_id` del YAML; vacío si `global` |
@@ -80,6 +81,7 @@ Entrada: `Concepto`, `Importe`, `Persona`, `Banco` + campos de **Metadatos** (Au
 | `entidad` | string | Override de plataforma; vacío → heredar del banco/cuenta |
 | `persona` | `Santi` \| `Sandra` \| `Común` | Override de persona |
 | `importe_signo` | `positivo` \| `negativo` | Fuerza signo del importe (casos raros) |
+| `invertir_importe` | bool | Multiplica el importe por −1 (p. ej. MyInvestor: inversiones como gastos) |
 
 ---
 

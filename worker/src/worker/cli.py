@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from worker.excel_import.service import import_excel
+from worker.gastos_comun_import.service import import_gastos_comun
 from worker.nocodb import NocoDbClient
 from worker.preview import analyze_file
 
@@ -51,6 +52,13 @@ def main(argv: list[str] | None = None) -> int:
         help="Importa aunque NocoDB ya tenga igual o más filas",
     )
 
+    import_gastos_comun_cmd = sub.add_parser(
+        "import-gastos-comun",
+        help="Importa GastosComún.xlsx (hoja Gastos Común) como Persona = Común",
+    )
+    import_gastos_comun_cmd.add_argument("file", type=Path, help="Ruta al Excel (p. ej. GastosComún.xlsx)")
+    import_gastos_comun_cmd.add_argument("--dry-run", action="store_true", help="No inserta; solo informe")
+
     args = parser.parse_args(argv)
 
     if args.command == "analyze":
@@ -71,6 +79,17 @@ def main(argv: list[str] | None = None) -> int:
                 default_persona=args.persona,
                 dry_run=args.dry_run,
                 skip_existing=not args.force,
+            )
+        )
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "import-gastos-comun":
+        report = asyncio.run(
+            import_gastos_comun(
+                _nocodb_client(),
+                args.file,
+                dry_run=args.dry_run,
             )
         )
         print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))

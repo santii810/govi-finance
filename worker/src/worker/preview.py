@@ -27,21 +27,24 @@ def analyze_file(
     else:
         account, ambiguities = resolve_account(accounts, parser_name)
         if account is None:
-            preview = ImportPreview(
-                account_id="",
-                account_label="",
-                banco="",
-                tipo_cuenta="personal",
-                persona="Santi",
-                fecha_desde=None,
-                fecha_hasta=None,
-                total_movimientos=0,
-                gastos_count=0,
-                ingresos_count=0,
-                ejemplos=[],
-                ambiguedades=ambiguities,
-            )
-            return preview, []
+            matches = [a for a in accounts if a.parser == parser_name]
+            if not matches:
+                preview = ImportPreview(
+                    account_id="",
+                    account_label="",
+                    banco="",
+                    tipo_cuenta="personal",
+                    persona="Santi",
+                    fecha_desde=None,
+                    fecha_hasta=None,
+                    total_movimientos=0,
+                    gastos_count=0,
+                    ingresos_count=0,
+                    ejemplos=[],
+                    ambiguedades=ambiguities,
+                )
+                return preview, []
+            account = matches[0]
 
     raw_movements = parse(path, parser_name)
     raw_movements = [m for m in raw_movements if m.importe != 0]

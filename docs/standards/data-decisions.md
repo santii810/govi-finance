@@ -67,6 +67,14 @@
 - Spec: `docs/design/10-excel-migration.md`.
 - Ingresos ya cargados (547 = Santi). Gastos/Inversión/Patrimonio vía CLI.
 
+### GastosComún.xlsx (2026-06-20)
+- Herramienta: `python -m worker import-gastos-comun GastosComún.xlsx` (`worker/`).
+- Hoja: `Gastos Común`. Siempre `Persona = Común`. No borra registros existentes.
+- **Ubicación** (texto) en Gastos: viaje (`UbicaciónViaxe`) solo para categorías Viaxes.
+- **Categoría** compuesta con `_`:
+  - ReformaPiso → `ReformaPiso_{CategoríaReforma}`
+  - Viaxes → `Viaxes_{Categoría2Viaxe}_{CategoríaViaxe}` (doble nivel; omite el segundo segmento si repite ubicación o el primer nivel)
+
 ### Pendiente
 - Mapeo al insertar en Ingresos desde wizard.
 - Importar datos históricos del usuario en Inversiones.
@@ -100,6 +108,20 @@
 - Seed acordado: VANGUARD US 500 → SP500, AMUNDI MSCI EM → MSCI EM (Tipo: `Fondo indexado`).
 - Seed insertado en NocoDB (2026-06-15): IDs **5** y **6**.
 
+### ImportRules — Persona (2026-06-21)
+- Campo **Persona** (`Santi` | `Sandra`) añadido a tabla ImportRules — **obligatorio**, sin valor Común.
+- Visibilidad: cada usuario ve **solo sus reglas**; no las del otro usuario.
+- Al crear regla desde la web: `Persona` = usuario logueado (campo no expuesto en UI).
+- Registros existentes (14) migrados a **Santi** (creados por Santi).
+- Motor de clasificación y listado UI filtran con `(Persona,eq,{usuario})`.
+- Confirmado (2026-06-21): no hay reglas Común; cada persona escribe las suyas. Campo obligatorio en NocoDB, no expuesto en UI.
+
+### ImportRules — invertir importe (2026-06-21)
+- Clave **`invertir_importe`** (bool) dentro del JSON **Acciones** — no requiere columna nueva en NocoDB.
+- Al aplicar la regla, el importe clasificado se multiplica por −1 (wizard, aceptar/modificar tarea).
+- Caso de uso: MyInvestor registra aportaciones a fondos como gastos (importe negativo); reglas hacia **Inversiones** con `invertir_importe: true` convierten el signo antes del insert.
+- UI: checkbox «Invertir cantidad» en formulario de reglas (`12-reglas-clasificacion.md`).
+
 ### AutomaticActions — Metadatos (2025-06-13)
 - Campo **Metadatos** (JSON) añadido en NocoDB (`c7sy9p6eb0fd60f`).
 - Worker inserta datos ricos del parseo + `account_id`.
@@ -113,7 +135,7 @@
 | Ingresos           | mrr99jc3e3707n6 | Persona añadida; 547 registros = Santi |
 | Users              | mwspabgn3fdm9ot | 2 usuarios (Santi, Sandra); bcrypt en PasswordHash |
 | **AutomaticActions** | mugm6tw1ail68rq | IdempotencyKey, Estado, Fecha, Importe, Concepto, Banco, Persona, **Metadatos** |
-| **ImportRules**      | mo7uf7o396lxp59 | 7 campos; 2 reglas globales seed |
+| **ImportRules**      | mo7uf7o396lxp59 | Nombre, Persona, Activa, Alcance, Cuenta, Prioridad, Condición, Acciones |
 | **Inversiones**      | mwnd0d416iwzwv6 | Entidad, Fecha, Nombre, Importe, Tipo, Persona |
 | **Patrimonio**       | mimdsus64el2tnl | Entidad, Fecha, Nombre, Valor, Tipo, Persona |
 

@@ -31,6 +31,7 @@ export function categoryColor(name: string, index = 0): string {
   return CATEGORY_COLORS[name] ?? NAME_COLORS[index % NAME_COLORS.length];
 }
 
-export function fmtK(value: number): number {
-  return Number((value / 1000).toFixed(1));
+export function siteColorMap(siteNames: string[]): Record<string, string> {
+  const unique = [...new Set(siteNames)].sort((a, b) => a.localeCompare(b, "es"));
+  return Object.fromEntries(unique.map((site, i) => [site, categoryColor(site, i)]));
 }

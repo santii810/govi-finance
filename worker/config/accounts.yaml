@@ -17,6 +17,15 @@ accounts:
     detection:
       parser: revolut
 
+  - id: revolut-comun
+    label: "Revolut — Común (conjunta)"
+    banco: Revolut
+    tipo: conjunta
+    persona: Común
+    parser: revolut
+    detection:
+      parser: revolut
+
   - id: myinvestor-santi
     label: "MyInvestor — Santi (personal)"
     banco: MyInvestor

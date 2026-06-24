@@ -250,6 +250,12 @@ export interface GastosRankingSite {
   count: number;
 }
 
+export interface GastosRankingMeal {
+  name: string;
+  total: number;
+  site: string;
+}
+
 export interface GastosRestauracionData {
   total: number;
   monthlyAverage: number;
@@ -258,7 +264,7 @@ export interface GastosRestauracionData {
   monthlySummary: { monthLabel: string; total: number; tickets: number }[];
   topByVisits: NamedAmount[];
   topBySpending: GastosRankingSite[];
-  topExpensiveMeals: NamedAmount[];
+  topExpensiveMeals: GastosRankingMeal[];
   recentMoves: GastosMove[];
 }
 

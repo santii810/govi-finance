@@ -170,3 +170,39 @@ def test_account_rule_does_not_apply_to_other_account():
         nocodb_rules=rules,
     )
     assert result.categoria is None
+
+
+def test_invertir_importe_on_negative_inversion():
+    """MyInvestor: aportación negativa → Inversiones con importe positivo."""
+    rules = [
+        NocoDbRule(
+            id="4",
+            scope="global",
+            account_id=None,
+            priority=0,
+            condition={"importe_negativo": True},
+            actions={"tabla_destino": "Gastos"},
+        ),
+        NocoDbRule(
+            id="30",
+            scope="global",
+            account_id=None,
+            priority=500,
+            condition={"concepto_exacto": "AMUNDI INDEX MSCI EMERG MKTS I"},
+            actions={
+                "tabla_destino": "Inversiones",
+                "tipo": "Fondo indexado",
+                "nombre": "MSCI EM",
+                "invertir_importe": True,
+            },
+        ),
+    ]
+    pending = _movement(-150)
+    pending.concepto = "AMUNDI INDEX MSCI EMERG MKTS I"
+    result = apply_rules_to_pending(
+        pending,
+        account_id="myinvestor-santi",
+        nocodb_rules=rules,
+    )
+    assert result.tabla_destino == "Inversiones"
+    assert result.importe == Decimal("150")

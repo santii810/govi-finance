@@ -69,6 +69,9 @@ class NocoDbClient:
     async def patch_column(self, column_id: str, body: dict[str, Any]) -> dict[str, Any]:
         return await self._request("PATCH", f"/api/v2/meta/columns/{column_id}", json=body)
 
+    async def create_column(self, table_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._request("POST", f"/api/v2/meta/tables/{table_id}/columns", json=body)
+
     async def existing_idempotency_keys(
         self,
         table_id: str,

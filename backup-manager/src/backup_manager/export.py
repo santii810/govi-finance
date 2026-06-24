@@ -9,6 +9,7 @@ from typing import Any
 
 from backup_manager.config import BackupConfig
 from backup_manager.nocodb import NocoDbClient
+from backup_manager.progress import BackupProgress
 
 
 def _safe_filename(name: str) -> str:
@@ -53,7 +54,12 @@ def _write_csv(path: Path, columns: list[str], rows: list[dict[str, Any]]) -> No
             writer.writerow({column: _cell_value(row.get(column)) for column in columns})
 
 
-async def export_base(client: NocoDbClient, config: BackupConfig) -> Path:
+async def export_base(
+    client: NocoDbClient,
+    config: BackupConfig,
+    *,
+    progress: BackupProgress | None = None,
+) -> Path:
     timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     export_dir = config.staging_dir / f"export-{timestamp}"
     tables_dir = export_dir / "tables"
@@ -61,14 +67,26 @@ async def export_base(client: NocoDbClient, config: BackupConfig) -> Path:
     tables_dir.mkdir(parents=True)
     meta_dir.mkdir(parents=True)
 
+    if progress:
+        progress.update(5, "export", "Obteniendo tablas…")
+
     tables = await client.list_base_tables(config.base_id)
     manifest_tables: list[dict[str, Any]] = []
+    total_tables = len([table for table in tables if table.get("id")])
 
-    for table in tables:
+    for index, table in enumerate(tables):
         table_id = str(table.get("id", ""))
         table_title = str(table.get("title") or table_id)
         if not table_id:
             continue
+
+        if progress and total_tables > 0:
+            percent = 5 + int(65 * index / total_tables)
+            progress.update(
+                percent,
+                "export",
+                f"Exportando {table_title} ({index + 1}/{total_tables})…",
+            )
 
         meta = await client.get_table_meta(table_id)
         rows = await client.fetch_all_records(table_id)
@@ -93,6 +111,14 @@ async def export_base(client: NocoDbClient, config: BackupConfig) -> Path:
                 "meta": f"meta/{meta_path.name}",
             }
         )
+
+        if progress and total_tables > 0:
+            percent = 5 + int(65 * (index + 1) / total_tables)
+            progress.update(
+                percent,
+                "export",
+                f"Exportado {table_title} ({len(rows)} filas)",
+            )
 
     manifest = {
         "exported_at": datetime.now(UTC).isoformat(),

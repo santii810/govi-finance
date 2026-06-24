@@ -7,6 +7,7 @@ La web carga reglas desde NocoDB y aplica al mostrar/revisar pending.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -106,6 +107,9 @@ def _rule_matches(rule: NocoDbRule, movement: RawMovement, account_id: str) -> b
     exact = condition.get("concepto_exacto")
     if exact and movement.concepto.strip().lower() != str(exact).strip().lower():
         return False
+    regex = condition.get("concepto_regex")
+    if regex and not re.search(str(regex), movement.concepto, re.IGNORECASE):
+        return False
     tx_type = condition.get("tipo") or condition.get("type")
     if tx_type and movement.metadata.get("type", "").lower() != str(tx_type).lower():
         return False
@@ -131,7 +135,9 @@ def _apply_actions(classified: ClassifiedMovement, actions: dict) -> ClassifiedM
     importe = classified.importe
     if "importe_signo" in actions:
         sign = Decimal("1") if actions["importe_signo"] == "positivo" else Decimal("-1")
-        importe = abs(classified.importe) * sign
+        importe = abs(importe) * sign
+    if actions.get("invertir_importe"):
+        importe = importe * Decimal("-1")
     return ClassifiedMovement(
         fecha=classified.fecha,
         importe=importe,

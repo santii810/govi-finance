@@ -10,7 +10,7 @@ import {
   YAxis,
   type TooltipProps,
 } from "recharts";
-import { NAME_COLORS } from "@/components/gastos/colors";
+import { NAME_COLORS, siteColorMap } from "@/components/gastos/colors";
 import { RankingBarChart } from "@/components/gastos/ranking-bar-chart";
 import { TotalApuntadoCard } from "@/components/gastos/total-apuntado-card";
 import { formatEur } from "@/lib/persona";
@@ -101,6 +101,11 @@ export function RestauracionView({ data }: RestauracionViewProps) {
   });
 
   const ticketTotal = data.monthlySummary.reduce((s, r) => s + r.tickets, 0);
+  const topSiteColors = siteColorMap([
+    ...data.topByVisits.map((item) => item.name),
+    ...data.topBySpending.map((item) => item.name),
+    ...data.topExpensiveMeals.map((item) => item.site),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -144,6 +149,7 @@ export function RestauracionView({ data }: RestauracionViewProps) {
           <RankingBarChart
             items={data.topByVisits}
             color="#db2777"
+            colorMap={topSiteColors}
             limit={10}
             formatValue={(value) => `${value} ${value === 1 ? "visita" : "visitas"}`}
             formatAxis={(value) => String(Math.round(value))}
@@ -152,12 +158,22 @@ export function RestauracionView({ data }: RestauracionViewProps) {
 
         <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
           <p className="mb-4 text-sm font-medium text-muted">Top 10 sitios por gasto</p>
-          <RankingBarChart items={data.topBySpending} color="#db2777" limit={10} />
+          <RankingBarChart
+            items={data.topBySpending}
+            color="#db2777"
+            colorMap={topSiteColors}
+            limit={10}
+          />
         </div>
 
         <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
           <p className="mb-4 text-sm font-medium text-muted">Top 10 comidas más caras</p>
-          <RankingBarChart items={data.topExpensiveMeals} color="#db2777" limit={10} />
+          <RankingBarChart
+            items={data.topExpensiveMeals}
+            color="#db2777"
+            colorMap={topSiteColors}
+            limit={10}
+          />
         </div>
       </div>
 

@@ -40,7 +40,8 @@ Todos los widgets **reaccionan al filtro** (sin recargar la página).
 - Solo gastos visibles para el usuario logueado (Persona = suyo o Común).
 - Persona = Común → **50%** del importe en agregaciones (ADR-0004). *No mostrar en UI; es implícito.*
 - Campo importe: **Gasto**. Campo fecha: **Fecha**. Campo categoría: **Categoría**.
-- Campo **Nombre**: establecimiento/concepto/viaje según subpestaña (Supermercado, Piso, Viaxes).
+- Campo **Destino**: establecimiento/concepto (Supermercado, Restauración, detalle de ticket en viajes).
+- Campo **Ubicación**: nombre del viaje en subpestaña Viaxes (Burdeos, Madeira…).
 
 ## Layout — vista agregada (Totales / Gastos de vida)
 
@@ -98,7 +99,9 @@ Agregación por **Nombre** (`Categoría = Piso`):
 Sin evolución mensual (los viajes no son regulares).
 
 - Total apuntado (+ comparativa YTD) · nº de viajes en el período
-- **Tabla año × viaje × total** — por cada año: filas con cada viaje (campo **Nombre**) y su importe; subfila **Total {año}**; si hay varios años, **Total período** al pie
+- **Barras apiladas por año** — altura = total del año; segmentos = **Ubicación** (comparativa interanual)
+- **Tabla pivot** — filas = **Ubicación**, columnas = categoría nivel 1 (`Viaxes_X_…` → `X`; p. ej. Transporte, Hotel, Restauración)
+- **Tabla año × viaje × total** — por cada año: filas con cada viaje (campo **Ubicación**) y su importe; subfila **Total {año}**; si hay varios años, **Total período** al pie. Solo registros con **Ubicación** rellena (excluye histórico sin migrar).
 
 ## Layout — Restauración (acordado 2026-06-15)
 

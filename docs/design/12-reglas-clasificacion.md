@@ -72,6 +72,7 @@ Orden por defecto: **Prioridad** descendente, luego **Nombre**.
 | Alcance | `Alcance` + `Cuenta` si `account` |
 | Prioridad | `Prioridad` (default según tipo de condición) |
 | Activa | `Activa` |
+| Invertir cantidad | `Acciones.invertir_importe` (bool) |
 
 **Tipos de condición en modo simple:**
 

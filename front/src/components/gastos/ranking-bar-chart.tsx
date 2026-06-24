@@ -22,6 +22,7 @@ interface RankingItem {
   name: string;
   total: number;
   count?: number;
+  site?: string;
 }
 
 interface RankingBarChartProps {
@@ -124,9 +125,10 @@ export function RankingBarChart({
           />
           <Tooltip content={<RankingTooltip formatValue={formatValue} />} />
           <Bar dataKey="total" fill={color} radius={[0, 4, 4, 0]} barSize={20}>
-            {chartData.map((entry) => (
-              <Cell key={entry.name} fill={colorMap?.[entry.name] ?? color} />
-            ))}
+            {chartData.map((entry) => {
+              const colorKey = entry.site ?? entry.name;
+              return <Cell key={entry.name} fill={colorMap?.[colorKey] ?? color} />;
+            })}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
