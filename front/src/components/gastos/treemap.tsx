@@ -7,6 +7,8 @@ import { formatEur } from "@/lib/persona";
 interface TreemapProps {
   data: Record<string, number>;
   colorMap: Record<string, string>;
+  bare?: boolean;
+  className?: string;
 }
 
 interface TreemapNode {
@@ -100,39 +102,53 @@ function TreemapCell({ x = 0, y = 0, width = 0, height = 0, name = "", value = 0
   );
 }
 
-export function Treemap({ data, colorMap }: TreemapProps) {
+export function Treemap({ data, colorMap, bare = false, className }: TreemapProps) {
   const nodes = useMemo(() => prepareNodes(data, colorMap), [data, colorMap]);
 
   if (nodes.length === 0) {
     return (
-      <div className="flex h-52 items-center justify-center rounded-lg border border-border bg-card text-sm text-muted">
+      <div
+        className={
+          bare
+            ? `flex items-center justify-center text-sm text-muted ${className ?? "h-full w-full"}`
+            : "flex h-52 items-center justify-center rounded-lg border border-border bg-card text-sm text-muted"
+        }
+      >
         Sin datos
       </div>
     );
   }
 
+  const chart = (
+    <ResponsiveContainer width="100%" height="100%">
+      <RechartsTreemap
+        data={nodes}
+        dataKey="value"
+        aspectRatio={4 / 3}
+        isAnimationActive={false}
+        stroke="var(--card)"
+        content={<TreemapCell />}
+      >
+        <Tooltip
+          formatter={(value: number) => formatEur(value)}
+          labelFormatter={(label) => String(label)}
+          contentStyle={{
+            borderRadius: 8,
+            border: "1px solid var(--border)",
+            fontSize: 12,
+          }}
+        />
+      </RechartsTreemap>
+    </ResponsiveContainer>
+  );
+
+  if (bare) {
+    return <div className={className ?? "h-full w-full"}>{chart}</div>;
+  }
+
   return (
     <div className="h-52 w-full rounded-lg border border-border bg-card">
-      <ResponsiveContainer width="100%" height="100%">
-        <RechartsTreemap
-          data={nodes}
-          dataKey="value"
-          aspectRatio={4 / 3}
-          isAnimationActive={false}
-          stroke="var(--card)"
-          content={<TreemapCell />}
-        >
-          <Tooltip
-            formatter={(value: number) => formatEur(value)}
-            labelFormatter={(label) => String(label)}
-            contentStyle={{
-              borderRadius: 8,
-              border: "1px solid var(--border)",
-              fontSize: 12,
-            }}
-          />
-        </RechartsTreemap>
-      </ResponsiveContainer>
+      {chart}
     </div>
   );
 }

@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { MetricCard } from "@/components/metric-card";
-import { DistributionPie } from "@/components/ingresos/distribution-pie";
-import { HorizontalBarChart } from "@/components/ingresos/horizontal-bar-chart";
+import { SwitchableDistributionChart } from "@/components/ingresos/switchable-distribution-chart";
 import { IngresosLineChart } from "@/components/ingresos/line-chart";
 import { MonthHeatmap } from "@/components/ingresos/month-heatmap";
 import { PivotHeatmap } from "@/components/ingresos/pivot-heatmap";
@@ -115,13 +114,8 @@ export function DashboardIngresos() {
       <IngresosLineChart data={data.yearlyLine} />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <HorizontalBarChart title="Por origen" data={data.byOrigen} />
-        <HorizontalBarChart title="Por categoría" data={data.byCategoria} />
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <DistributionPie title="Distribución por origen" data={data.byOrigen} />
-        <DistributionPie title="Distribución por categoría" data={data.byCategoria} />
+        <SwitchableDistributionChart title="Por origen" data={data.byOrigen} />
+        <SwitchableDistributionChart title="Por categoría" data={data.byCategoria} />
       </div>
 
       {data.pivot.rows.length > 0 && (
