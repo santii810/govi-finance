@@ -143,8 +143,8 @@ export function RestauracionView({ data }: RestauracionViewProps) {
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+      <div className="grid gap-4 overflow-visible lg:grid-cols-3">
+        <div className="overflow-visible rounded-2xl border border-border bg-card p-5 shadow-sm">
           <p className="mb-4 text-sm font-medium text-muted">Top 10 sitios más visitados</p>
           <RankingBarChart
             items={data.topByVisits}
@@ -156,7 +156,7 @@ export function RestauracionView({ data }: RestauracionViewProps) {
           />
         </div>
 
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+        <div className="overflow-visible rounded-2xl border border-border bg-card p-5 shadow-sm">
           <p className="mb-4 text-sm font-medium text-muted">Top 10 sitios por gasto</p>
           <RankingBarChart
             items={data.topBySpending}
@@ -166,7 +166,7 @@ export function RestauracionView({ data }: RestauracionViewProps) {
           />
         </div>
 
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+        <div className="overflow-visible rounded-2xl border border-border bg-card p-5 shadow-sm">
           <p className="mb-4 text-sm font-medium text-muted">Top 10 comidas más caras</p>
           <RankingBarChart
             items={data.topExpensiveMeals}

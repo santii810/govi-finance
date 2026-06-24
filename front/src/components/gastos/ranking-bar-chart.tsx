@@ -34,6 +34,8 @@ interface RankingBarChartProps {
   formatAxis?: (value: number) => string;
 }
 
+const TOOLTIP_WIDTH = 176;
+
 function formatAxisK(value: number): string {
   if (value >= 1000) return `${Math.round(value / 1000)}k`;
   if (value >= 100) return `${(value / 1000).toFixed(1)}k`;
@@ -51,8 +53,11 @@ function RankingTooltip({
   if (!row) return null;
 
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-sm">
-      <p className="mb-2 font-medium text-foreground">{row.name}</p>
+    <div
+      className="max-w-44 rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-sm"
+      style={{ transform: "translateX(calc(-100% - 8px))", maxWidth: TOOLTIP_WIDTH }}
+    >
+      <p className="mb-2 font-medium leading-snug text-foreground">{row.name}</p>
       <ul className="space-y-1">
         <li className="flex items-baseline justify-between gap-4">
           <span className="text-muted">Total</span>
@@ -100,12 +105,12 @@ export function RankingBarChart({
   );
 
   return (
-    <div className="w-full" style={{ height: chartHeight }}>
+    <div className="w-full overflow-visible" style={{ height: chartHeight }}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
           data={chartData}
           layout="vertical"
-          margin={{ top: 4, right: 24, left: 4, bottom: 4 }}
+          margin={{ top: 4, right: 8, left: 4, bottom: 4 }}
           barCategoryGap="20%"
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
@@ -123,7 +128,12 @@ export function RankingBarChart({
             stroke="#64748b"
             interval={0}
           />
-          <Tooltip content={<RankingTooltip formatValue={formatValue} />} />
+          <Tooltip
+            content={<RankingTooltip formatValue={formatValue} />}
+            allowEscapeViewBox={{ x: true, y: true }}
+            wrapperStyle={{ zIndex: 20, outline: "none" }}
+            cursor={{ fill: "rgba(148, 163, 184, 0.2)" }}
+          />
           <Bar dataKey="total" fill={color} radius={[0, 4, 4, 0]} barSize={20}>
             {chartData.map((entry) => {
               const colorKey = entry.site ?? entry.name;

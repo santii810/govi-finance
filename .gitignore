@@ -14,6 +14,7 @@ out/
 .turbo/
 .cache/
 .parcel-cache/
+*.tsbuildinfo
 
 # Logs
 *.log
@@ -32,6 +33,7 @@ __pycache__/
 .venv/
 venv/
 worker/.venv/
+*.egg-info/
 
 # Exports bancarios reales (muestras locales)
 worker/samples/**/*.csv
@@ -48,3 +50,7 @@ Thumbs.db
 *.swp
 *.swo
 *~
+Finanzas.xlsx
+GastosComún.xlsx
+.vscode/mcp.json
+govi-finance/
