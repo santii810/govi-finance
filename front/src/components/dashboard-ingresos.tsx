@@ -7,21 +7,18 @@ import { IngresosLineChart } from "@/components/ingresos/line-chart";
 import { MonthHeatmap } from "@/components/ingresos/month-heatmap";
 import { PivotHeatmap } from "@/components/ingresos/pivot-heatmap";
 import { YearFilter } from "@/components/ingresos/year-filter";
-import { formatEur } from "@/lib/persona";
 import type { IngresosData, IngresosFilterMode } from "@/lib/types";
 
 function buildQuery(
   mode: IngresosFilterMode,
   yearFrom: string,
   yearTo: string,
-  singleYear: string,
 ): string {
   const params = new URLSearchParams({ mode });
   if (mode === "range") {
     params.set("from", yearFrom);
     params.set("to", yearTo);
   }
-  if (mode === "year") params.set("year", singleYear);
   return params.toString();
 }
 
@@ -33,13 +30,12 @@ export function DashboardIngresos() {
   const [mode, setMode] = useState<IngresosFilterMode>("all");
   const [yearFrom, setYearFrom] = useState("2012");
   const [yearTo, setYearTo] = useState("2025");
-  const [singleYear, setSingleYear] = useState("2025");
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const qs = buildQuery(mode, yearFrom, yearTo, singleYear);
+      const qs = buildQuery(mode, yearFrom, yearTo);
       const res = await fetch(`/api/dashboard/ingresos?${qs}`);
       if (!res.ok) {
         const body = (await res.json()) as { error?: string };
@@ -52,14 +48,13 @@ export function DashboardIngresos() {
         const last = json.availableYears[json.availableYears.length - 1];
         setYearFrom((prev) => (json.availableYears.includes(prev) ? prev : first));
         setYearTo((prev) => (json.availableYears.includes(prev) ? prev : last));
-        setSingleYear((prev) => (json.availableYears.includes(prev) ? prev : last));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error desconocido");
     } finally {
       setLoading(false);
     }
-  }, [mode, yearFrom, yearTo, singleYear]);
+  }, [mode, yearFrom, yearTo]);
 
   useEffect(() => {
     load();
@@ -84,12 +79,10 @@ export function DashboardIngresos() {
         mode={mode}
         yearFrom={yearFrom}
         yearTo={yearTo}
-        singleYear={singleYear}
         availableYears={data.availableYears}
         onModeChange={setMode}
         onYearFromChange={setYearFrom}
         onYearToChange={setYearTo}
-        onSingleYearChange={setSingleYear}
         periodLabel={periodLabel}
       />
 
@@ -119,10 +112,17 @@ export function DashboardIngresos() {
       </div>
 
       {data.pivot.rows.length > 0 && (
-        <PivotHeatmap origenKeys={data.pivot.origenKeys} rows={data.pivot.rows} />
+        <PivotHeatmap
+          origenKeys={data.pivot.origenKeys}
+          rows={data.pivot.rows}
+          details={data.pivot.details}
+          colLabel="Origen"
+        />
       )}
 
-      {data.heatmap.length > 0 && <MonthHeatmap rows={data.heatmap} />}
+      {data.heatmap.length > 0 && (
+        <MonthHeatmap rows={data.heatmap} details={data.heatmapDetails} labelHeader="Categoría" />
+      )}
     </div>
   );
 }

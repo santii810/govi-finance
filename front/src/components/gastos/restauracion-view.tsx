@@ -8,14 +8,57 @@ import {
   Tooltip,
   XAxis,
   YAxis,
+  type TooltipProps,
 } from "recharts";
 import { NAME_COLORS } from "@/components/gastos/colors";
+import { RankingBarChart } from "@/components/gastos/ranking-bar-chart";
 import { TotalApuntadoCard } from "@/components/gastos/total-apuntado-card";
 import { formatEur } from "@/lib/persona";
 import type { GastosMove, GastosRestauracionData } from "@/lib/types";
 
 interface RestauracionViewProps {
   data: GastosRestauracionData;
+}
+
+interface RestauracionChartRow {
+  month: string;
+  [key: string]: number | string;
+}
+
+function RestauracionTooltip({ active, payload, label }: TooltipProps<number, string>) {
+  if (!active || !payload?.length) return null;
+
+  const row = payload[0]?.payload as RestauracionChartRow | undefined;
+  if (!row) return null;
+
+  const entries = payload
+    .filter((entry) => typeof entry.value === "number" && entry.value > 0)
+    .map((entry) => {
+      const slot = String(entry.dataKey ?? "").replace(/^t/, "");
+      const concept = row[`c${slot}`];
+      return {
+        key: String(entry.dataKey),
+        concept: typeof concept === "string" && concept ? concept : String(entry.dataKey),
+        amount: entry.value as number,
+      };
+    })
+    .sort((a, b) => b.amount - a.amount);
+
+  if (entries.length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-sm">
+      <p className="mb-2 font-medium text-foreground">{label}</p>
+      <ul className="space-y-1">
+        {entries.map((entry) => (
+          <li key={entry.key} className="flex items-baseline justify-between gap-4">
+            <span className="truncate text-foreground">{entry.concept}</span>
+            <span className="shrink-0 tabular-nums text-muted">{formatEur(entry.amount)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 function MovesTable({ moves }: { moves: GastosMove[] }) {
@@ -48,10 +91,11 @@ function MovesTable({ moves }: { moves: GastosMove[] }) {
 
 export function RestauracionView({ data }: RestauracionViewProps) {
   const maxSlots = Math.max(0, ...data.stackedByMonth.map((m) => m.tickets.length));
-  const chartRows = data.stackedByMonth.map((m) => {
-    const row: Record<string, number | string> = { month: m.monthLabel };
+  const chartRows: RestauracionChartRow[] = data.stackedByMonth.map((m) => {
+    const row: RestauracionChartRow = { month: m.monthLabel };
     m.tickets.forEach((ticket, slot) => {
-      row[`t${slot}`] = ticket;
+      row[`t${slot}`] = ticket.amount;
+      row[`c${slot}`] = ticket.concept;
     });
     return row;
   });
@@ -79,7 +123,7 @@ export function RestauracionView({ data }: RestauracionViewProps) {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="month" tick={{ fontSize: 10 }} stroke="#64748b" />
                 <YAxis tick={{ fontSize: 11 }} stroke="#64748b" />
-                <Tooltip formatter={(v: number) => formatEur(v)} />
+                <Tooltip content={<RestauracionTooltip />} />
                 {Array.from({ length: maxSlots }, (_, slot) => (
                   <Bar
                     key={slot}
@@ -93,6 +137,29 @@ export function RestauracionView({ data }: RestauracionViewProps) {
           </div>
         </div>
       )}
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <p className="mb-4 text-sm font-medium text-muted">Top 10 sitios más visitados</p>
+          <RankingBarChart
+            items={data.topByVisits}
+            color="#db2777"
+            limit={10}
+            formatValue={(value) => `${value} ${value === 1 ? "visita" : "visitas"}`}
+            formatAxis={(value) => String(Math.round(value))}
+          />
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <p className="mb-4 text-sm font-medium text-muted">Top 10 sitios por gasto</p>
+          <RankingBarChart items={data.topBySpending} color="#db2777" limit={10} />
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <p className="mb-4 text-sm font-medium text-muted">Top 10 comidas más caras</p>
+          <RankingBarChart items={data.topExpensiveMeals} color="#db2777" limit={10} />
+        </div>
+      </div>
 
       <div className="space-y-3">
         <p className="text-sm font-medium">Resumen mensual</p>

@@ -2,13 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchIngresos } from "@/lib/ingresos-dashboard";
 import { getAppConfig } from "@/lib/config";
 import { NocoDbClient } from "@/lib/nocodb";
+import { parsePeriodFilterMode } from "@/lib/period-filter";
 import { getSession } from "@/lib/session";
-import type { IngresosFilterMode } from "@/lib/types";
-
-function parseMode(value: string | null): IngresosFilterMode {
-  if (value === "last5" || value === "range" || value === "year") return value;
-  return "all";
-}
 
 export async function GET(req: NextRequest) {
   try {
@@ -20,10 +15,9 @@ export async function GET(req: NextRequest) {
     }
 
     const params = req.nextUrl.searchParams;
-    const mode = parseMode(params.get("mode"));
+    const mode = parsePeriodFilterMode(params.get("mode"), "all");
     const yearFrom = params.get("from") ?? undefined;
     const yearTo = params.get("to") ?? undefined;
-    const singleYear = params.get("year") ?? undefined;
 
     const client = new NocoDbClient(nocodbUrl, nocodbToken);
     const data = await fetchIngresos(
@@ -33,7 +27,6 @@ export async function GET(req: NextRequest) {
       mode,
       yearFrom,
       yearTo,
-      singleYear,
     );
 
     return NextResponse.json(data);

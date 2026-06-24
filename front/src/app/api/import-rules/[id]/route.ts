@@ -46,7 +46,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     }
 
     const client = new NocoDbClient(nocodbUrl, nocodbToken);
-    const rule = await updateImportRule(client, id, partial);
+    const rule = await updateImportRule(client, id, session.user.persona, partial);
     return NextResponse.json({ rule });
   } catch (err) {
     console.error("Import rule update error:", err);
@@ -66,7 +66,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     }
 
     const client = new NocoDbClient(nocodbUrl, nocodbToken);
-    await deleteImportRule(client, id);
+    await deleteImportRule(client, id, session.user.persona);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("Import rule delete error:", err);

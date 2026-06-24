@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getAppConfig, TABLES } from "@/lib/config";
 import { NocoDbClient } from "@/lib/nocodb";
 import { getSession } from "@/lib/session";
-import { parseSelectOptions } from "@/lib/table-select-options";
+import { parseSelectOptions, selectOptionsList, sortOptionsAlpha } from "@/lib/table-select-options";
 
 export interface FieldOptions {
   categoriaGastos: string[];
@@ -35,12 +35,12 @@ export async function GET() {
     const inversionesOptions = parseSelectOptions(inversionesMeta.columns ?? []);
 
     const options: FieldOptions = {
-      categoriaGastos: Array.from(gastosOptions["Categoría"] ?? []),
-      categoriaIngresos: Array.from(ingresosOptions["Categoría"] ?? []),
-      tipoInversiones: Array.from(inversionesOptions["Tipo"] ?? []),
-      entidadInversiones: Array.from(inversionesOptions["Entidad"] ?? []),
-      persona: ["Santi", "Sandra", "Común"],
-      tablaDestino: ["Gastos", "Ingresos", "Inversiones"],
+      categoriaGastos: selectOptionsList(gastosOptions, "Categoría"),
+      categoriaIngresos: selectOptionsList(ingresosOptions, "Categoría"),
+      tipoInversiones: selectOptionsList(inversionesOptions, "Tipo"),
+      entidadInversiones: selectOptionsList(inversionesOptions, "Entidad"),
+      persona: sortOptionsAlpha(["Santi", "Sandra", "Común"]),
+      tablaDestino: sortOptionsAlpha(["Gastos", "Ingresos", "Inversiones"]),
     };
 
     return NextResponse.json(options);

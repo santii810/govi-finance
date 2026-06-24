@@ -19,6 +19,14 @@ export function parseSelectOptions(columns: ColumnMeta[]): SelectOptionsMap {
   return map;
 }
 
+export function sortOptionsAlpha(values: Iterable<string>): string[] {
+  return [...values].sort((a, b) => a.localeCompare(b, "es"));
+}
+
+export function selectOptionsList(map: SelectOptionsMap, field: string): string[] {
+  return sortOptionsAlpha(map[field] ?? []);
+}
+
 export function pickSelectValue(
   field: string,
   value: string | null | undefined,

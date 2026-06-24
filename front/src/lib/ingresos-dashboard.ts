@@ -1,15 +1,18 @@
 import type { NocoDbClient } from "./nocodb";
+import { yearsFromDateBounds } from "./nocodb";
 import { TABLES } from "./config";
 import {
   attributedAmount,
   currentYearKey,
-  lastNYearsKeys,
-  monthIndex,
+  getDateParts,
   parseAmount,
   parseDate,
   personaFilter,
-  yearKey,
+  yearBoundsIso,
 } from "./persona";
+import { resolvePeriodFilterRange } from "./period-filter";
+import { buildPivotDetails, formatPivotDate, type PivotDrilldownMove } from "./pivot-drilldown";
+import { INGRESOS_FIELDS } from "./table-fields";
 import type {
   IngresosData,
   IngresosFilterMode,
@@ -25,18 +28,25 @@ interface IngresoRecord {
   amount: number;
   origen: string;
   categoria: string;
+  year: string;
+  monthIndex: number;
+  monthKey: string;
 }
 
-function mapIngresos(records: Record<string, unknown>[]): IngresoRecord[] {
+function mapIngresos(records: Record<string, unknown>[], timezone: string): IngresoRecord[] {
   return records
     .map((r) => {
       const date = parseDate(r.Fecha);
       if (!date) return null;
+      const parts = getDateParts(date, timezone);
       return {
         date,
         amount: attributedAmount(parseAmount(r.Ingreso), r.Persona),
         origen: String(r.Origen ?? "Sin origen"),
         categoria: String(r.Categoría ?? r.Categoria ?? "Sin categoría"),
+        year: parts.year,
+        monthIndex: parts.monthIndex,
+        monthKey: parts.monthKey,
       };
     })
     .filter((r): r is IngresoRecord => r !== null);
@@ -48,37 +58,18 @@ function resolveFilterRange(
   availableYears: string[],
   yearFrom?: string,
   yearTo?: string,
-  singleYear?: string,
-): { from: string; to: string; year?: string } {
-  if (mode === "year" && singleYear) {
-    return { from: singleYear, to: singleYear, year: singleYear };
-  }
-  if (mode === "last5") {
-    const { from, to } = lastNYearsKeys(timezone, 5);
-    return { from, to };
-  }
-  if (mode === "range" && yearFrom && yearTo) {
-    const from = yearFrom <= yearTo ? yearFrom : yearTo;
-    const to = yearFrom <= yearTo ? yearTo : yearFrom;
-    return { from, to };
-  }
-  const from = availableYears[0] ?? currentYearKey(timezone);
-  const to = availableYears[availableYears.length - 1] ?? currentYearKey(timezone);
-  return { from, to };
+): { from: string; to: string } {
+  return resolvePeriodFilterRange(mode, timezone, availableYears, yearFrom, yearTo);
 }
 
-function filterByYears(records: IngresoRecord[], from: string, to: string, timezone: string): IngresoRecord[] {
-  return records.filter((r) => {
-    const y = yearKey(r.date, timezone);
-    return y >= from && y <= to;
-  });
+function filterByYears(records: IngresoRecord[], from: string, to: string): IngresoRecord[] {
+  return records.filter((r) => r.year >= from && r.year <= to);
 }
 
-function sumByYear(records: IngresoRecord[], timezone: string): IngresosYearPoint[] {
+function sumByYear(records: IngresoRecord[]): IngresosYearPoint[] {
   const totals = new Map<string, number>();
   for (const r of records) {
-    const y = yearKey(r.date, timezone);
-    totals.set(y, (totals.get(y) ?? 0) + r.amount);
+    totals.set(r.year, (totals.get(r.year) ?? 0) + r.amount);
   }
   return [...totals.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
@@ -96,16 +87,31 @@ function sumByField(records: IngresoRecord[], field: "origen" | "categoria"): Na
     .map(([name, total]) => ({ name, total }));
 }
 
-function buildPivot(records: IngresoRecord[], timezone: string): { origenKeys: string[]; rows: IngresosPivotRow[] } {
+function buildPivot(records: IngresoRecord[], timezone: string): {
+  origenKeys: string[];
+  rows: IngresosPivotRow[];
+  details: Record<string, PivotDrilldownMove[]>;
+} {
   const origenSet = new Set<string>();
   const grid = new Map<string, Map<string, number>>();
+  const entries: Array<{ rowKey: string; colKey: string; ts: number; move: PivotDrilldownMove }> = [];
 
   for (const r of records) {
     origenSet.add(r.origen);
-    const y = yearKey(r.date, timezone);
+    const y = r.year;
     if (!grid.has(y)) grid.set(y, new Map());
     const row = grid.get(y)!;
     row.set(r.origen, (row.get(r.origen) ?? 0) + r.amount);
+    entries.push({
+      rowKey: y,
+      colKey: r.origen,
+      ts: r.date.getTime(),
+      move: {
+        date: formatPivotDate(r.date, timezone),
+        label: r.categoria,
+        amount: r.amount,
+      },
+    });
   }
 
   const origenKeys = [...origenSet].sort((a, b) => a.localeCompare(b));
@@ -122,29 +128,46 @@ function buildPivot(records: IngresoRecord[], timezone: string): { origenKeys: s
       return { year, values, total };
     });
 
-  return { origenKeys, rows };
+  return { origenKeys, rows, details: buildPivotDetails(entries) };
 }
 
-function buildHeatmap(records: IngresoRecord[], timezone: string): IngresosHeatmapRow[] {
+const HEATMAP_MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+function buildHeatmap(
+  records: IngresoRecord[],
+  timezone: string,
+): { rows: IngresosHeatmapRow[]; details: Record<string, PivotDrilldownMove[]> } {
   const grid = new Map<string, number[]>();
+  const entries: Array<{ rowKey: string; colKey: string; ts: number; move: PivotDrilldownMove }> = [];
 
   for (const r of records) {
-    const y = yearKey(r.date, timezone);
+    const y = r.year;
     if (!grid.has(y)) grid.set(y, Array(12).fill(0));
     const months = grid.get(y)!;
-    months[monthIndex(r.date, timezone)] += r.amount;
+    months[r.monthIndex] += r.amount;
+    entries.push({
+      rowKey: y,
+      colKey: HEATMAP_MONTHS[r.monthIndex],
+      ts: r.date.getTime(),
+      move: {
+        date: formatPivotDate(r.date, timezone),
+        label: r.categoria,
+        amount: r.amount,
+      },
+    });
   }
 
-  return [...grid.entries()]
+  const rows = [...grid.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([year, months]) => ({ year, months }));
+
+  return { rows, details: buildPivotDetails(entries) };
 }
 
-function monthlyAverage(records: IngresoRecord[], timezone: string): number {
+function monthlyAverage(records: IngresoRecord[]): number {
   const monthTotals = new Map<string, number>();
   for (const r of records) {
-    const key = `${yearKey(r.date, timezone)}-${monthIndex(r.date, timezone)}`;
-    monthTotals.set(key, (monthTotals.get(key) ?? 0) + r.amount);
+    monthTotals.set(r.monthKey, (monthTotals.get(r.monthKey) ?? 0) + r.amount);
   }
   const monthsWithData = [...monthTotals.values()].filter((v) => v > 0);
   if (monthsWithData.length === 0) return 0;
@@ -159,35 +182,45 @@ export async function fetchIngresos(
   mode: IngresosFilterMode = "all",
   yearFrom?: string,
   yearTo?: string,
-  singleYear?: string,
 ): Promise<IngresosData> {
   const where = personaFilter(persona);
-  const ingresosRaw = await client.listRecords(TABLES.ingresos, where);
-  const all = mapIngresos(ingresosRaw);
+  const bounds = await client.availableYears(TABLES.ingresos, "Fecha", where);
+  const availableYears = yearsFromDateBounds(bounds.min, bounds.max, timezone, currentYearKey(timezone));
 
-  const yearSet = new Set(all.map((r) => yearKey(r.date, timezone)));
-  const availableYears = [...yearSet].sort();
-
-  const filter = resolveFilterRange(mode, timezone, availableYears, yearFrom, yearTo, singleYear);
-  const filtered = filterByYears(all, filter.from, filter.to, timezone);
-
+  const filter = resolveFilterRange(mode, timezone, availableYears, yearFrom, yearTo);
   const currentYear = currentYearKey(timezone);
+  const fetchFrom = String(Math.min(Number(filter.from), Number(currentYear)));
+  const fetchTo = String(Math.max(Number(filter.to), Number(currentYear)));
+  const { from: apiFrom, to: apiTo } = yearBoundsIso(fetchFrom, fetchTo);
+
+  const ingresosRaw = await client.listRecords(TABLES.ingresos, {
+    where,
+    fields: [...INGRESOS_FIELDS],
+    dateFrom: { field: "Fecha", iso: apiFrom },
+    dateTo: { field: "Fecha", iso: apiTo },
+  });
+  const all = mapIngresos(ingresosRaw, timezone);
+  const filtered = filterByYears(all, filter.from, filter.to);
   const currentYearTotal = all
-    .filter((r) => yearKey(r.date, timezone) === currentYear)
+    .filter((r) => r.year === currentYear)
     .reduce((sum, r) => sum + r.amount, 0);
+
+  const pivot = buildPivot(filtered, timezone);
+  const heatmapData = buildHeatmap(filtered, timezone);
 
   return {
     metrics: {
       periodTotal: filtered.reduce((sum, r) => sum + r.amount, 0),
       currentYearTotal,
-      monthlyAverage: monthlyAverage(filtered, timezone),
+      monthlyAverage: monthlyAverage(filtered),
     },
     availableYears,
-    yearlyLine: sumByYear(filtered, timezone),
+    yearlyLine: sumByYear(filtered),
     byOrigen: sumByField(filtered, "origen"),
     byCategoria: sumByField(filtered, "categoria"),
-    pivot: buildPivot(filtered, timezone),
-    heatmap: buildHeatmap(filtered, timezone),
+    pivot,
+    heatmap: heatmapData.rows,
+    heatmapDetails: heatmapData.details,
     filter: { mode, ...filter },
   };
 }

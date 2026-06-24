@@ -1,13 +1,15 @@
 import { TABLES } from "./config";
-import { parseImportRule } from "./classifier";
+import { parseImportRule, loadAllImportRulesForUser } from "./classifier";
 import { parseJsonField } from "./import-rules/engine";
-import type { ImportRule, ImportRuleInput } from "./import-rules/types";
+import type { ImportRule, ImportRuleInput, PersonaValue } from "./import-rules/types";
 import { NocoDbClient } from "./nocodb";
-import type { NocoRecord } from "./types";
+import { isImportRuleVisible } from "./persona";
+import type { NocoRecord, Persona } from "./types";
 
-function toNocoRecord(input: ImportRuleInput): NocoRecord {
+function toNocoRecord(input: ImportRuleInput & { persona: PersonaValue }): NocoRecord {
   return {
     Nombre: input.nombre,
+    Persona: input.persona,
     Activa: input.activa,
     Alcance: input.alcance,
     Cuenta: input.cuenta ?? "",
@@ -17,16 +19,27 @@ function toNocoRecord(input: ImportRuleInput): NocoRecord {
   };
 }
 
-export async function listAllImportRules(client: NocoDbClient): Promise<ImportRule[]> {
-  const records = await client.listRecords(TABLES.importRules);
-  return records
-    .map(parseImportRule)
-    .sort((a, b) => b.priority - a.priority || a.nombre.localeCompare(b.nombre, "es"));
+export async function listImportRulesForUser(
+  client: NocoDbClient,
+  userPersona: Persona,
+): Promise<ImportRule[]> {
+  return loadAllImportRulesForUser(client, userPersona);
+}
+
+export async function getImportRuleForUser(
+  client: NocoDbClient,
+  id: string,
+  userPersona: Persona,
+): Promise<ImportRule | null> {
+  const record = await client.getRecord(TABLES.importRules, id);
+  if (!record) return null;
+  const rule = parseImportRule(record);
+  return isImportRuleVisible(rule.persona, userPersona) ? rule : null;
 }
 
 export async function createImportRule(
   client: NocoDbClient,
-  input: ImportRuleInput,
+  input: ImportRuleInput & { persona: PersonaValue },
 ): Promise<ImportRule> {
   const created = await client.createRecord(TABLES.importRules, toNocoRecord(input));
   const id = String(created.Id ?? "");
@@ -43,22 +56,23 @@ export async function createImportRule(
 export async function updateImportRule(
   client: NocoDbClient,
   id: string,
+  userPersona: Persona,
   input: Partial<ImportRuleInput>,
 ): Promise<ImportRule> {
-  const existing = await client.getRecord(TABLES.importRules, id);
+  const existing = await getImportRuleForUser(client, id, userPersona);
   if (!existing) {
     throw new RuleError("Regla no encontrada", 404);
   }
 
-  const current = parseImportRule(existing);
-  const merged: ImportRuleInput = {
-    nombre: input.nombre ?? current.nombre,
-    activa: input.activa ?? current.active,
-    alcance: input.alcance ?? current.scope,
-    cuenta: input.cuenta !== undefined ? input.cuenta : current.accountId,
-    prioridad: input.prioridad ?? current.priority,
-    condition: input.condition ?? current.condition,
-    actions: input.actions ?? current.actions,
+  const merged: ImportRuleInput & { persona: PersonaValue } = {
+    nombre: input.nombre ?? existing.nombre,
+    persona: existing.persona,
+    activa: input.activa ?? existing.active,
+    alcance: input.alcance ?? existing.scope,
+    cuenta: input.cuenta !== undefined ? input.cuenta : existing.accountId,
+    prioridad: input.prioridad ?? existing.priority,
+    condition: input.condition ?? existing.condition,
+    actions: input.actions ?? existing.actions,
   };
 
   await client.updateRecord(TABLES.importRules, id, toNocoRecord(merged));
@@ -69,8 +83,12 @@ export async function updateImportRule(
   return parseImportRule(updated);
 }
 
-export async function deleteImportRule(client: NocoDbClient, id: string): Promise<void> {
-  const existing = await client.getRecord(TABLES.importRules, id);
+export async function deleteImportRule(
+  client: NocoDbClient,
+  id: string,
+  userPersona: Persona,
+): Promise<void> {
+  const existing = await getImportRuleForUser(client, id, userPersona);
   if (!existing) {
     throw new RuleError("Regla no encontrada", 404);
   }
@@ -95,9 +113,13 @@ export function mapRuleError(err: unknown): { message: string; status: number } 
 }
 
 /** Valida que condition/actions sean JSON parseables si vienen como string. */
-export function normalizeRuleInput(body: NocoRecord): ImportRuleInput {
+export function normalizeRuleInput(
+  body: NocoRecord,
+  defaultPersona: Persona,
+): ImportRuleInput & { persona: PersonaValue } {
   return {
     nombre: String(body.nombre ?? ""),
+    persona: defaultPersona,
     activa: body.activa !== false,
     alcance: body.alcance === "account" ? "account" : "global",
     cuenta: body.cuenta ? String(body.cuenta) : null,

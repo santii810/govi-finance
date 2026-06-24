@@ -21,12 +21,12 @@ export async function POST() {
     const response = await fetch(`${backupUrl}/backup`, {
       method: "POST",
       headers: { Authorization: `Bearer ${triggerSecret}` },
-      signal: AbortSignal.timeout(300_000),
+      signal: AbortSignal.timeout(15_000),
     });
 
     const payload = (await response.json()) as {
       ok?: boolean;
-      archive?: string;
+      started?: boolean;
       error?: string;
     };
 
@@ -37,10 +37,7 @@ export async function POST() {
       );
     }
 
-    return NextResponse.json({
-      ok: true,
-      archive: payload.archive,
-    });
+    return NextResponse.json({ ok: true, started: payload.started ?? true });
   } catch (err) {
     console.error("Backup trigger error:", err);
     return NextResponse.json(

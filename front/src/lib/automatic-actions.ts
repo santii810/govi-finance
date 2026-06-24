@@ -12,7 +12,7 @@ import {
   pickSelectValue,
   type SelectOptionsMap,
 } from "./table-select-options";
-import type { NocoRecord } from "./types";
+import type { NocoRecord, Persona } from "./types";
 
 const selectOptionsCache = new Map<string, SelectOptionsMap>();
 
@@ -29,6 +29,7 @@ async function getSelectOptions(client: NocoDbClient, tableId: string): Promise<
 async function loadClassifiedPending(
   client: NocoDbClient,
   id: string,
+  userPersona: Persona,
 ): Promise<ClassifiedPending> {
   const record = await client.getRecord(TABLES.automaticActions, id);
   if (!record) {
@@ -38,7 +39,7 @@ async function loadClassifiedPending(
     throw new ActionError("La tarea ya no está pendiente", 409);
   }
 
-  const rules = await loadImportRules(client);
+  const rules = await loadImportRules(client, userPersona);
   return classifyMovement(parsePendingMovement(record), rules);
 }
 
@@ -114,9 +115,10 @@ export interface ModifyFields {
 export async function modifyPending(
   client: NocoDbClient,
   id: string,
+  userPersona: Persona,
   fields: ModifyFields,
 ): Promise<AcceptResult> {
-  const item = await loadClassifiedPending(client, id);
+  const item = await loadClassifiedPending(client, id, userPersona);
 
   const merged: ClassifiedPending = {
     ...item,
@@ -132,7 +134,7 @@ export async function modifyPending(
   };
 
   if (!merged.tablaDestino) {
-    throw new ActionError("No hay tabla destino seleccionada", 422);
+    throw new ActionError("Categoriza el movimiento antes de guardarlo", 422);
   }
 
   const tableId = destinoTableId(merged.tablaDestino);
@@ -164,10 +166,17 @@ export interface AcceptResult {
   destRecordId: string;
 }
 
-export async function acceptPending(client: NocoDbClient, id: string): Promise<AcceptResult> {
-  const item = await loadClassifiedPending(client, id);
+export async function acceptPending(
+  client: NocoDbClient,
+  id: string,
+  userPersona: Persona,
+): Promise<AcceptResult> {
+  const item = await loadClassifiedPending(client, id, userPersona);
+  if (item.ignorar) {
+    throw new ActionError("Este movimiento debe ignorarse, no registrarse", 422);
+  }
   if (!item.tablaDestino) {
-    throw new ActionError("No hay tabla destino propuesta", 422);
+    throw new ActionError("Categoriza el movimiento antes de guardarlo", 422);
   }
 
   const tableId = destinoTableId(item.tablaDestino);
@@ -199,6 +208,7 @@ export async function ignorePending(client: NocoDbClient, id: string): Promise<v
 export async function undoPending(
   client: NocoDbClient,
   id: string,
+  userPersona: Persona,
   opts?: { destTableId?: string; destRecordId?: string },
 ): Promise<ClassifiedPending> {
   const record = await client.getRecord(TABLES.automaticActions, id);
@@ -225,7 +235,7 @@ export async function undoPending(
     throw new ActionError("Tarea no encontrada tras deshacer", 500);
   }
 
-  const rules = await loadImportRules(client);
+  const rules = await loadImportRules(client, userPersona);
   return classifyMovement(parsePendingMovement(updated), rules);
 }
 

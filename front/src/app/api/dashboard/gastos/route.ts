@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchGastos } from "@/lib/gastos-dashboard";
 import { getAppConfig } from "@/lib/config";
 import { NocoDbClient } from "@/lib/nocodb";
+import { parsePeriodFilterMode } from "@/lib/period-filter";
 import { getSession } from "@/lib/session";
-import type { GastosFilterMode, GastosSubTab } from "@/lib/types";
+import type { GastosSubTab } from "@/lib/types";
 
 const VALID_SUB_TABS = new Set<GastosSubTab>([
   "general",
@@ -21,11 +22,6 @@ function parseSubTab(value: string | null): GastosSubTab {
   return "vida";
 }
 
-function parseMode(value: string | null): GastosFilterMode {
-  if (value === "all" || value === "last5" || value === "range") return value;
-  return "current";
-}
-
 export async function GET(req: NextRequest) {
   try {
     const { nocodbUrl, nocodbToken, sessionSecret, timezone } = getAppConfig();
@@ -37,7 +33,7 @@ export async function GET(req: NextRequest) {
 
     const params = req.nextUrl.searchParams;
     const subTab = parseSubTab(params.get("subTab"));
-    const mode = parseMode(params.get("mode"));
+    const mode = parsePeriodFilterMode(params.get("mode"), "current");
     const yearFrom = params.get("from") ?? undefined;
     const yearTo = params.get("to") ?? undefined;
 

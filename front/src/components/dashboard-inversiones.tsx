@@ -14,14 +14,12 @@ function buildQuery(
   mode: InversionesFilterMode,
   yearFrom: string,
   yearTo: string,
-  singleYear: string,
 ): string {
   const params = new URLSearchParams({ mode });
   if (mode === "range") {
     params.set("from", yearFrom);
     params.set("to", yearTo);
   }
-  if (mode === "year") params.set("year", singleYear);
   return params.toString();
 }
 
@@ -33,13 +31,12 @@ export function DashboardInversiones() {
   const [mode, setMode] = useState<InversionesFilterMode>("all");
   const [yearFrom, setYearFrom] = useState("2021");
   const [yearTo, setYearTo] = useState("2025");
-  const [singleYear, setSingleYear] = useState("2025");
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const qs = buildQuery(mode, yearFrom, yearTo, singleYear);
+      const qs = buildQuery(mode, yearFrom, yearTo);
       const res = await fetch(`/api/dashboard/inversiones?${qs}`);
       if (!res.ok) {
         const body = (await res.json()) as { error?: string };
@@ -52,14 +49,13 @@ export function DashboardInversiones() {
         const last = json.availableYears[json.availableYears.length - 1];
         setYearFrom((prev) => (json.availableYears.includes(prev) ? prev : first));
         setYearTo((prev) => (json.availableYears.includes(prev) ? prev : last));
-        setSingleYear((prev) => (json.availableYears.includes(prev) ? prev : last));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error desconocido");
     } finally {
       setLoading(false);
     }
-  }, [mode, yearFrom, yearTo, singleYear]);
+  }, [mode, yearFrom, yearTo]);
 
   useEffect(() => {
     load();
@@ -84,12 +80,10 @@ export function DashboardInversiones() {
         mode={mode}
         yearFrom={yearFrom}
         yearTo={yearTo}
-        singleYear={singleYear}
         availableYears={data.availableYears}
         onModeChange={setMode}
         onYearFromChange={setYearFrom}
         onYearToChange={setYearTo}
-        onSingleYearChange={setSingleYear}
         periodLabel={periodLabel}
       />
 
@@ -132,6 +126,9 @@ export function DashboardInversiones() {
           rows={data.pivot.rows}
           title="Año × entidad"
           signed
+          details={data.pivot.details}
+          colLabel="Entidad"
+          labelHeader="Nombre"
         />
       )}
 

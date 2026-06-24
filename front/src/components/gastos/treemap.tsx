@@ -1,7 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
-import { ResponsiveContainer, Tooltip, Treemap as RechartsTreemap } from "recharts";
+import {
+  ResponsiveContainer,
+  Tooltip,
+  Treemap as RechartsTreemap,
+  type TooltipProps,
+} from "recharts";
 import { formatEur } from "@/lib/persona";
 
 interface TreemapProps {
@@ -11,10 +16,16 @@ interface TreemapProps {
   className?: string;
 }
 
+interface TreemapBreakdownItem {
+  name: string;
+  value: number;
+}
+
 interface TreemapNode {
   name: string;
   value: number;
   fill: string;
+  breakdown?: TreemapBreakdownItem[];
 }
 
 const MAX_ITEMS = 8;
@@ -47,6 +58,7 @@ function prepareNodes(data: Record<string, number>, colorMap: Record<string, str
       name: `Otros (${rest.length})`,
       value: othersValue,
       fill: OTHERS_COLOR,
+      breakdown: rest.map(([name, value]) => ({ name, value })),
     },
   ];
 }
@@ -64,9 +76,27 @@ interface TreemapCellProps {
 function TreemapCell({ x = 0, y = 0, width = 0, height = 0, name = "", value = 0, fill = OTHERS_COLOR }: TreemapCellProps) {
   if (width <= 0 || height <= 0) return null;
 
-  const showName = width >= 44 && height >= 28;
-  const showAmount = width >= 64 && height >= 44;
-  const fontSize = width < 80 ? 10 : 11;
+  const showName = width >= 66 && height >= 42;
+  const showAmount = width >= 96 && height >= 66;
+  const fontSize = width < 80 ? 15 : 17;
+  const amountFontSize = width < 80 ? 16 : 18;
+  const maxChars = Math.max(4, Math.floor(width / 13));
+  const displayName =
+    name.length > maxChars ? `${name.slice(0, Math.max(4, maxChars - 1))}…` : name;
+
+  const labelStyle = {
+    letterSpacing: "1px",
+    fontWeight: 300,
+  } as const;
+  const amountStyle = {
+    letterSpacing: "0.6px",
+    fontWeight: 400,
+  } as const;
+  const textOutline = {
+    stroke: "rgba(0,0,0,0.3)",
+    strokeWidth: 0.25,
+    paintOrder: "stroke fill" as const,
+  };
 
   return (
     <g>
@@ -84,21 +114,67 @@ function TreemapCell({ x = 0, y = 0, width = 0, height = 0, name = "", value = 0
       {showName && (
         <text
           x={x + 8}
-          y={y + (showAmount ? height - 22 : height - 10)}
+          y={y + (showAmount ? height - 38 : height - 14)}
           fill="#fff"
           fontSize={fontSize}
-          fontWeight={500}
+          style={labelStyle}
+          {...textOutline}
           pointerEvents="none"
         >
-          {name.length > Math.floor(width / 7) ? `${name.slice(0, Math.max(4, Math.floor(width / 7) - 1))}…` : name}
+          {displayName}
         </text>
       )}
       {showAmount && (
-        <text x={x + 8} y={y + height - 8} fill="#fff" fontSize={fontSize + 1} fontWeight={600} pointerEvents="none">
+        <text
+          x={x + 8}
+          y={y + height - 12}
+          fill="#fff"
+          fontSize={amountFontSize}
+          style={amountStyle}
+          {...textOutline}
+          pointerEvents="none"
+        >
           {formatEur(value)}
         </text>
       )}
     </g>
+  );
+}
+
+function TreemapTooltip({ active, payload }: TooltipProps<number, string>) {
+  if (!active || !payload?.length) return null;
+
+  const node = payload[0]?.payload as TreemapNode | undefined;
+  if (!node?.name) return null;
+
+  if (node.breakdown?.length) {
+    return (
+      <div
+        className="max-h-56 overflow-y-auto rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-sm"
+        style={{ fontSize: 12 }}
+      >
+        <p className="font-medium text-foreground">{node.name}</p>
+        <p className="mb-2 mt-0.5 tabular-nums text-muted">{formatEur(node.value)}</p>
+        <ul className="space-y-1 border-t border-border pt-2">
+          {node.breakdown.map((item) => (
+            <li key={item.name} className="flex items-baseline justify-between gap-4">
+              <span className="truncate text-foreground">{item.name}</span>
+              <span className="shrink-0 tabular-nums text-muted">{formatEur(item.value)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-sm"
+      style={{ fontSize: 12 }}
+    >
+      <p className="font-medium text-foreground">{node.name}</p>
+      <p className="mt-0.5 tabular-nums text-muted">{formatEur(node.value)}</p>
+    </div>
   );
 }
 
@@ -129,15 +205,7 @@ export function Treemap({ data, colorMap, bare = false, className }: TreemapProp
         stroke="var(--card)"
         content={<TreemapCell />}
       >
-        <Tooltip
-          formatter={(value: number) => formatEur(value)}
-          labelFormatter={(label) => String(label)}
-          contentStyle={{
-            borderRadius: 8,
-            border: "1px solid var(--border)",
-            fontSize: 12,
-          }}
-        />
+        <Tooltip content={<TreemapTooltip />} />
       </RechartsTreemap>
     </ResponsiveContainer>
   );

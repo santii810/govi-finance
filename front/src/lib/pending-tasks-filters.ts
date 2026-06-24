@@ -28,6 +28,7 @@ export const TIPO_FILTER_OPTIONS: { value: TipoMovimiento; label: string }[] = [
   { value: "ingreso", label: "Ingreso" },
   { value: "gasto", label: "Gasto" },
   { value: "inversion", label: "Inversión" },
+  { value: "transferencia", label: "Transferencia" },
   { value: "otro", label: "Otro" },
 ];
 

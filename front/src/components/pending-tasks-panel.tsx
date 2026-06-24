@@ -8,9 +8,10 @@ import {
   EMPTY_PENDING_FILTERS,
   type PendingTasksFilters,
 } from "@/lib/pending-tasks-filters";
-import { groupPendingByFecha } from "@/lib/pending-tasks-groups";
+import { groupPendingByRegla, getReglaGroupSubtitle, sumPendingImportes } from "@/lib/pending-tasks-groups";
 import { PendingTasksSidebar } from "@/components/pending-tasks-sidebar";
 import { ImportRulesPanel } from "@/components/import-rules-panel";
+import { SearchableSelect } from "@/components/searchable-select";
 import type { FieldOptions } from "@/app/api/automatic-actions/options/route";
 
 interface PendingResponse {
@@ -47,7 +48,27 @@ const COMMIT_MS = 5000;
 const TICK_MS = 250;
 
 const TABLA_DESTINO_OPTIONS: TablaDestino[] = ["Gastos", "Ingresos", "Inversiones"];
-const PERSONA_OPTIONS: PersonaValue[] = ["Santi", "Sandra", "Común"];
+const PERSONA_OPTIONS: PersonaValue[] = ["Común", "Sandra", "Santi"];
+
+function formatGitEur(amount: number): string {
+  return formatEur(amount).replace(/\s/g, "");
+}
+
+function GroupImporteStats({ items }: { items: ClassifiedPending[] }) {
+  const { incrementos, decrementos } = useMemo(() => sumPendingImportes(items), [items]);
+  if (incrementos === 0 && decrementos === 0) return null;
+
+  return (
+    <span className="flex items-center gap-1.5 text-xs font-medium tabular-nums">
+      {incrementos > 0 && (
+        <span className="text-income">+{formatGitEur(incrementos)}</span>
+      )}
+      {decrementos > 0 && (
+        <span className="text-expense">-{formatGitEur(decrementos)}</span>
+      )}
+    </span>
+  );
+}
 
 function formatFecha(fecha: string): string {
   const d = parseDate(fecha);
@@ -93,6 +114,26 @@ function PendingTaskRow({
 }: PendingTaskRowProps) {
   const isEditing = editingId === item.id;
   const isStaged = staged !== undefined;
+  const stagedDraft =
+    isStaged && staged.action === "modify" ? staged.draft : undefined;
+
+  const suggestedIgnore =
+    isStaged && staged.action === "ignore" ? true : item.ignorar;
+  const displayFecha = stagedDraft?.fecha ?? item.fecha;
+  const displayImporte = stagedDraft
+    ? (item.importe < 0
+        ? -Math.abs(parseFloat(stagedDraft.importe) || 0)
+        : Math.abs(parseFloat(stagedDraft.importe) || 0))
+    : item.importe;
+  const displayConcepto = stagedDraft?.concepto ?? item.concepto;
+  const displayPersona = stagedDraft?.persona ?? item.persona;
+  const displayTablaDestino = stagedDraft?.tablaDestino || item.tablaDestino;
+  const displayCategoria = stagedDraft?.categoria ?? item.categoria;
+  const displayTipo = stagedDraft?.tipo ?? item.tipo;
+  const displayNombre = stagedDraft?.nombre ?? item.nombre;
+
+  const sinCategorizar = !suggestedIgnore && !displayTablaDestino;
+  const canAccept = !suggestedIgnore && Boolean(item.tablaDestino);
 
   // Local draft state — initialised from item when edit opens
   const [draft, setDraft] = useState<EditDraft>({
@@ -145,40 +186,46 @@ function PendingTaskRow({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-            <span className="text-muted">{formatFecha(item.fecha)}</span>
+            <span className="text-muted">{formatFecha(displayFecha)}</span>
             <span
               className={
-                item.importe < 0 ? "font-medium text-expense" : "font-medium text-income"
+                displayImporte < 0 ? "font-medium text-expense" : "font-medium text-income"
               }
             >
-              {formatEur(item.importe)}
+              {formatEur(displayImporte)}
             </span>
-            <span className="truncate font-medium">{item.concepto || "—"}</span>
+            <span className="truncate font-medium">{displayConcepto || "—"}</span>
             {item.banco && <span className="text-muted">{item.banco}</span>}
           </div>
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
             <span>
               Destino:{" "}
-              <span className="text-foreground">{item.tablaDestino ?? "—"}</span>
+              <span className="text-foreground">
+                {suggestedIgnore
+                  ? "Transferencia (ignorar)"
+                  : sinCategorizar
+                    ? "Sin categorizar"
+                    : (displayTablaDestino ?? "—")}
+              </span>
             </span>
-            {item.tablaDestino === "Inversiones" ? (
+            {!suggestedIgnore && !sinCategorizar && displayTablaDestino === "Inversiones" ? (
               <>
                 <span>
-                  Tipo: <span className="text-foreground">{item.tipo ?? "—"}</span>
+                  Tipo: <span className="text-foreground">{displayTipo ?? "—"}</span>
                 </span>
                 <span>
-                  Nombre: <span className="text-foreground">{item.nombre ?? "—"}</span>
+                  Nombre: <span className="text-foreground">{displayNombre ?? "—"}</span>
                 </span>
               </>
-            ) : (
+            ) : !suggestedIgnore && !sinCategorizar ? (
               <span>
                 Categoría:{" "}
-                <span className="text-foreground">{item.categoria ?? "—"}</span>
+                <span className="text-foreground">{displayCategoria ?? "—"}</span>
               </span>
-            )}
+            ) : null}
             <span>
               Persona:{" "}
-              <span className="text-foreground">{item.persona}</span>
+              <span className="text-foreground">{displayPersona}</span>
             </span>
           </div>
         </div>
@@ -200,13 +247,24 @@ function PendingTaskRow({
             </>
           ) : (
             <>
-              <button
-                type="button"
-                onClick={() => onAccept(item.id)}
-                className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
-              >
-                Aceptar
-              </button>
+              {canAccept && (
+                <button
+                  type="button"
+                  onClick={() => onAccept(item.id)}
+                  className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+                >
+                  Aceptar
+                </button>
+              )}
+              {!canAccept && !suggestedIgnore && (
+                <button
+                  type="button"
+                  onClick={() => onOpenEdit(item.id)}
+                  className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+                >
+                  Categorizar
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => onIgnore(item.id)}
@@ -214,25 +272,27 @@ function PendingTaskRow({
               >
                 Ignorar
               </button>
-              <button
-                type="button"
-                onClick={() => onOpenEdit(item.id)}
-                className={`rounded-lg border px-3 py-1.5 text-sm transition ${
-                  isEditing
-                    ? "border-accent bg-accent/10 text-accent"
-                    : "border-border hover:bg-background"
-                }`}
-                aria-expanded={isEditing}
-              >
-                ✎
-              </button>
+              {!suggestedIgnore && canAccept && (
+                <button
+                  type="button"
+                  onClick={() => onOpenEdit(item.id)}
+                  className={`rounded-lg border px-3 py-1.5 text-sm transition ${
+                    isEditing
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border-border hover:bg-background"
+                  }`}
+                  aria-expanded={isEditing}
+                >
+                  ✎
+                </button>
+              )}
             </>
           )}
         </div>
       </div>
 
       {/* ── Formulario inline ── */}
-      {isEditing && !isStaged && (
+      {isEditing && !isStaged && !suggestedIgnore && (
         <div className="mt-3 rounded-lg border border-border bg-background p-4">
           <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted">
             Editar antes de guardar
@@ -303,18 +363,11 @@ function PendingTaskRow({
               <label className="flex flex-col gap-1">
                 <span className="text-xs text-muted">Categoría</span>
                 {categoriaOptions.length > 0 ? (
-                  <select
+                  <SearchableSelect
                     value={draft.categoria}
-                    onChange={(e) => setDraft((d) => ({ ...d, categoria: e.target.value }))}
-                    className="rounded-md border border-border bg-card px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
-                  >
-                    <option value="">— sin categoría —</option>
-                    {categoriaOptions.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(categoria) => setDraft((d) => ({ ...d, categoria }))}
+                    options={categoriaOptions}
+                  />
                 ) : (
                   <input
                     type="text"
@@ -424,13 +477,23 @@ export function PendingTasksPanel({ onCountChange }: PendingTasksPanelProps) {
   >(new Map());
   const [stagedSnapshot, setStagedSnapshot] = useState<Map<string, StagedAction>>(new Map());
   const [committingIds, setCommittingIds] = useState<Set<string>>(new Set());
+  const [bulkGroupAction, setBulkGroupAction] = useState<{
+    groupKey: string;
+    ids: string[];
+    action: "accept" | "ignore";
+    expiresAt: number;
+    secondsLeft: number;
+    committing: boolean;
+  } | null>(null);
+  const bulkGroupTimerRef = useRef<number | null>(null);
+  const bulkGroupTickRef = useRef<number | null>(null);
 
   const filteredItems = useMemo(
     () => applyPendingFilters(items, filters),
     [items, filters],
   );
-  const dayGroups = useMemo(
-    () => groupPendingByFecha(filteredItems),
+  const ruleGroups = useMemo(
+    () => groupPendingByRegla(filteredItems),
     [filteredItems],
   );
   function syncSnapshot() {
@@ -485,6 +548,8 @@ export function PendingTasksPanel({ onCountChange }: PendingTasksPanelProps) {
         window.clearTimeout(s.timerId);
         window.clearInterval(s.tickId);
       }
+      if (bulkGroupTimerRef.current) window.clearTimeout(bulkGroupTimerRef.current);
+      if (bulkGroupTickRef.current) window.clearInterval(bulkGroupTickRef.current);
     };
   }, []);
 
@@ -565,6 +630,10 @@ export function PendingTasksPanel({ onCountChange }: PendingTasksPanelProps) {
   }
 
   function stageAction(id: string, action: "accept" | "ignore" | "modify", draft?: EditDraft) {
+    if (action === "accept") {
+      const item = items.find((row) => row.id === id);
+      if (item && !item.ignorar && !item.tablaDestino) return;
+    }
     cancelAction(id);
 
     const expiresAt = Date.now() + COMMIT_MS;
@@ -595,6 +664,88 @@ export function PendingTasksPanel({ onCountChange }: PendingTasksPanelProps) {
     if (action === "modify") {
       setEditingId(null);
     }
+  }
+
+  function cancelBulkGroupAction() {
+    if (bulkGroupTimerRef.current) window.clearTimeout(bulkGroupTimerRef.current);
+    if (bulkGroupTickRef.current) window.clearInterval(bulkGroupTickRef.current);
+    bulkGroupTimerRef.current = null;
+    bulkGroupTickRef.current = null;
+    setBulkGroupAction(null);
+  }
+
+  async function commitBulkGroupAction(
+    groupKey: string,
+    ids: string[],
+    action: "accept" | "ignore",
+  ) {
+    cancelBulkGroupAction();
+    setBulkGroupAction({
+      groupKey,
+      ids,
+      action,
+      expiresAt: 0,
+      secondsLeft: 0,
+      committing: true,
+    });
+    setError("");
+
+    try {
+      await Promise.all(
+        ids.map(async (id) => {
+          const res = await fetch(`/api/automatic-actions/${id}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action }),
+          });
+          if (!res.ok) {
+            const body = (await res.json()) as { error?: string };
+            throw new Error(body.error ?? "Error al procesar");
+          }
+        }),
+      );
+      setItems((prev) => prev.filter((row) => !ids.includes(row.id)));
+      bumpCount(-ids.length);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error desconocido");
+    } finally {
+      setBulkGroupAction(null);
+    }
+  }
+
+  function stageBulkGroupAction(
+    groupKey: string,
+    action: "accept" | "ignore",
+    ids: string[],
+  ) {
+    const pendingIds = ids.filter((id) => !stagedRef.current.has(id));
+    if (pendingIds.length === 0) return;
+
+    cancelBulkGroupAction();
+    const expiresAt = Date.now() + COMMIT_MS;
+
+    bulkGroupTickRef.current = window.setInterval(() => {
+      setBulkGroupAction((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          secondsLeft: Math.max(0, Math.ceil((prev.expiresAt - Date.now()) / 1000)),
+        };
+      });
+    }, TICK_MS);
+
+    bulkGroupTimerRef.current = window.setTimeout(() => {
+      commitBulkGroupAction(groupKey, pendingIds, action);
+    }, COMMIT_MS);
+
+    setBulkGroupAction({
+      groupKey,
+      ids: pendingIds,
+      action,
+      expiresAt,
+      secondsLeft: Math.ceil(COMMIT_MS / 1000),
+      committing: false,
+    });
   }
 
   function cancelAction(id: string) {
@@ -656,35 +807,89 @@ export function PendingTasksPanel({ onCountChange }: PendingTasksPanelProps) {
             <p className="text-sm text-muted">Ninguna tarea coincide con los filtros.</p>
           )}
 
-          {dayGroups.length > 0 && (
+          {ruleGroups.length > 0 && (
             <div className="space-y-3">
-              {dayGroups.map((group) => {
+              {ruleGroups.map((group) => {
                 const expanded = !collapsedGroups.has(group.key);
+                const showBulk = !group.sinCategorizar;
+                const bulkAction = group.ignorar ? "ignore" : "accept";
+                const bulkLabel = group.ignorar ? "Ignorar todo" : "Aceptar todo";
+                const bulkPending =
+                  bulkGroupAction?.groupKey === group.key && !bulkGroupAction.committing;
+                const bulkCommitting =
+                  bulkGroupAction?.groupKey === group.key && bulkGroupAction.committing;
+                const bulkProgressLabel =
+                  bulkGroupAction?.action === "accept" ? "Aceptando todo" : "Ignorando todo";
 
                 return (
                   <section
                     key={group.key}
-                    className="overflow-hidden rounded-lg border border-border"
+                    className={`overflow-hidden rounded-lg border border-border ${
+                      group.ignorar || group.sinCategorizar ? "bg-card/40" : ""
+                    }`}
                   >
-                    <button
-                      type="button"
-                      onClick={() => toggleGroup(group.key)}
-                      aria-expanded={expanded}
-                      className="flex w-full items-center justify-between gap-3 bg-background px-4 py-2.5 text-left text-sm font-medium hover:bg-card"
-                    >
-                      <span>
-                        {group.label}
-                        <span className="ml-2 font-normal text-muted">
-                          ({group.items.length})
-                        </span>
-                      </span>
-                      <span className="shrink-0 text-muted" aria-hidden="true">
-                        {expanded ? "▾" : "▸"}
-                      </span>
-                    </button>
+                    <div className="flex flex-col gap-3 border-b border-border bg-background px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <button
+                        type="button"
+                        onClick={() => toggleGroup(group.key)}
+                        aria-expanded={expanded}
+                        className="min-w-0 flex-1 text-left hover:opacity-90"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold">{group.label}</span>
+                          <span className="text-sm font-normal text-muted">
+                            ({group.items.length})
+                          </span>
+                          <GroupImporteStats items={group.items} />
+                          <span className="shrink-0 text-muted" aria-hidden="true">
+                            {expanded ? "▾" : "▸"}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-xs text-muted">
+                          {getReglaGroupSubtitle(group.items)}
+                        </p>
+                      </button>
+                      {showBulk && (
+                      <div className="flex shrink-0 items-center gap-2">
+                        {bulkPending ? (
+                          <>
+                            <span className="text-sm text-muted">
+                              {bulkProgressLabel} ({bulkGroupAction?.secondsLeft}s)
+                            </span>
+                            <button
+                              type="button"
+                              onClick={cancelBulkGroupAction}
+                              className="rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-background"
+                            >
+                              Cancelar
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={Boolean(bulkCommitting)}
+                            onClick={() =>
+                              stageBulkGroupAction(
+                                group.key,
+                                bulkAction,
+                                group.items.map((item) => item.id),
+                              )
+                            }
+                            className={`rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-50 ${
+                              group.ignorar
+                                ? "border border-border hover:bg-background"
+                                : "bg-accent text-white hover:opacity-90"
+                            }`}
+                          >
+                            {bulkCommitting ? "Procesando…" : bulkLabel}
+                          </button>
+                        )}
+                      </div>
+                      )}
+                    </div>
 
                     {expanded && (
-                      <ul className="divide-y divide-border border-t border-border">
+                      <ul className="divide-y divide-border">
                         {group.items.map((item) => (
                           <PendingTaskRow
                             key={item.id}

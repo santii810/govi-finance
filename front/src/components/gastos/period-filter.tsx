@@ -1,6 +1,7 @@
 "use client";
 
 import type { GastosFilterMode } from "@/lib/types";
+import { previousYearLabel } from "@/lib/period-filter";
 
 interface PeriodFilterProps {
   mode: GastosFilterMode;
@@ -21,6 +22,8 @@ export function PeriodFilter({
   onYearFromChange,
   onYearToChange,
 }: PeriodFilterProps) {
+  const previousYear = previousYearLabel();
+
   return (
     <div className="flex flex-wrap items-center gap-3">
       <span className="text-sm font-medium">Período</span>
@@ -30,8 +33,9 @@ export function PeriodFilter({
         className="rounded-lg border border-border bg-background px-3 py-1.5 text-sm"
       >
         <option value="current">Año en curso</option>
-        <option value="all">Todo el histórico</option>
-        <option value="last5">Últimos 5 años</option>
+        <option value="previous">Año pasado ({previousYear})</option>
+        <option value="last3">Últimos 3 años</option>
+        <option value="all">Todo el periodo</option>
         <option value="range">Rango personalizado</option>
       </select>
 

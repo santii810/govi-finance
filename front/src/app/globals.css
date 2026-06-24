@@ -19,6 +19,7 @@
   --color-muted: var(--muted);
   --color-border: var(--border);
   --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
   --color-expense: var(--expense);
   --color-income: var(--income);
   --font-sans: var(--font-geist-sans);

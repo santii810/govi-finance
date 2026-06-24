@@ -73,11 +73,12 @@ export function DashboardGastos() {
   if (!data) return null;
 
   const availableYears = data.availableYears;
+  const filterQuery = buildQuery(subTab, mode, yearFrom, yearTo);
 
   function renderContent() {
     const { payload } = data!;
     if (payload.kind === "overview") {
-      return <OverviewView data={payload.data} />;
+      return <OverviewView data={payload.data} filterQuery={filterQuery} />;
     }
     if (payload.kind === "nombre") {
       const sectionLabel =
@@ -87,11 +88,12 @@ export function DashboardGastos() {
           data={payload.data}
           sectionLabel={sectionLabel}
           showMonthlyTable={data!.subTab === "piso"}
+          filterQuery={filterQuery}
         />
       );
     }
     if (payload.kind === "viajes") {
-      return <ViajesView data={payload.data} />;
+      return <ViajesView data={payload.data} filterQuery={filterQuery} />;
     }
     return <RestauracionView data={payload.data} />;
   }

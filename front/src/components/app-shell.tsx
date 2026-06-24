@@ -1,7 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DashboardGastos } from "@/components/dashboard-gastos";
 import { DashboardIngresos } from "@/components/dashboard-ingresos";
 import { DashboardInversiones } from "@/components/dashboard-inversiones";
@@ -18,15 +19,25 @@ interface AppShellProps {
 
 export function AppShell({ user, children }: AppShellProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const isInsertPage = pathname === "/app/insertar";
+  const isHome = pathname === "/app";
+
   const [activeTab, setActiveTab] = useState<Tab>("resumen");
+  const [visitedTabs, setVisitedTabs] = useState<Set<Tab>>(() => new Set(["resumen"]));
   const [menuOpen, setMenuOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [backupState, setBackupState] = useState<"idle" | "running" | "ok" | "error">("idle");
   const [backupMessage, setBackupMessage] = useState("");
+  const [backupPercent, setBackupPercent] = useState(0);
+  const [dashboardRefresh, setDashboardRefresh] = useState(0);
+  const prevPathRef = useRef(pathname);
+
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
   const fetchPendingCount = useCallback(async () => {
     try {
-      const res = await fetch("/api/automatic-actions/pending");
+      const res = await fetch("/api/automatic-actions/count");
       if (!res.ok) return;
       const json = (await res.json()) as { total?: number };
       setPendingCount(json.total ?? 0);
@@ -39,6 +50,30 @@ export function AppShell({ user, children }: AppShellProps) {
     fetchPendingCount();
   }, [fetchPendingCount]);
 
+  useEffect(() => {
+    if (prevPathRef.current === "/app/insertar" && pathname === "/app") {
+      setDashboardRefresh((n) => n + 1);
+    }
+    prevPathRef.current = pathname;
+  }, [pathname]);
+
+  function visitTab(tab: Tab) {
+    setVisitedTabs((prev) => {
+      if (prev.has(tab)) return prev;
+      const next = new Set(prev);
+      next.add(tab);
+      return next;
+    });
+  }
+
+  function goHome(tab: Tab = "resumen") {
+    visitTab(tab);
+    setActiveTab(tab);
+    if (!isHome) {
+      router.push("/app");
+    }
+  }
+
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
@@ -47,30 +82,65 @@ export function AppShell({ user, children }: AppShellProps) {
 
   async function handleBackup() {
     setBackupState("running");
-    setBackupMessage("Exportando y subiendo a Drive…");
+    setBackupPercent(0);
+    setBackupMessage("Iniciando…");
+
     try {
-      const res = await fetch("/api/backup/run", { method: "POST" });
-      const json = (await res.json()) as { archive?: string; error?: string };
-      if (!res.ok) {
+      const startRes = await fetch("/api/backup/run", { method: "POST" });
+      const startJson = (await startRes.json()) as { error?: string };
+      if (!startRes.ok) {
         setBackupState("error");
-        setBackupMessage(json.error ?? "No se pudo completar el backup");
+        setBackupMessage(startJson.error ?? "No se pudo iniciar el backup");
         return;
       }
-      setBackupState("ok");
-      setBackupMessage(`Listo: ${json.archive ?? "backup subido"}`);
+
+      for (let attempt = 0; attempt < 600; attempt += 1) {
+        await sleep(400);
+        const statusRes = await fetch("/api/backup/status", { cache: "no-store" });
+        const status = (await statusRes.json()) as {
+          running?: boolean;
+          percent?: number;
+          message?: string;
+          archive?: string;
+          error?: string;
+        };
+
+        if (!statusRes.ok) {
+          setBackupState("error");
+          setBackupMessage(status.error ?? "Error al consultar el progreso");
+          return;
+        }
+
+        setBackupPercent(status.percent ?? 0);
+        setBackupMessage(status.message ?? "Procesando…");
+
+        if (!status.running) {
+          if (status.error) {
+            setBackupState("error");
+            setBackupMessage(status.error);
+          } else {
+            setBackupState("ok");
+            setBackupPercent(100);
+            setBackupMessage(`Listo: ${status.archive ?? "backup subido"}`);
+          }
+          return;
+        }
+      }
+
+      setBackupState("error");
+      setBackupMessage("El backup tardó demasiado");
     } catch {
       setBackupState("error");
       setBackupMessage("Error de conexión con el servicio de backup");
     }
   }
 
-  const tabs: { id: Tab; label: string; disabled?: boolean; badge?: number }[] = [
+  const tabs: { id: Tab; label: string; disabled?: boolean }[] = [
     { id: "resumen", label: "Resumen" },
     { id: "gastos", label: "Gastos" },
     { id: "ingresos", label: "Ingresos" },
     { id: "inversion", label: "Inversión" },
     { id: "patrimonio", label: "Patrimonio" },
-    { id: "tareas", label: "Tareas", badge: pendingCount > 0 ? pendingCount : undefined },
   ];
 
   return (
@@ -79,7 +149,7 @@ export function AppShell({ user, children }: AppShellProps) {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
           <button
             type="button"
-            onClick={() => setActiveTab("resumen")}
+            onClick={() => goHome("resumen")}
             className="text-lg font-semibold tracking-tight"
           >
             Finanzas
@@ -88,7 +158,7 @@ export function AppShell({ user, children }: AppShellProps) {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setActiveTab("tareas")}
+              onClick={() => goHome("tareas")}
               className="relative rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-background"
             >
               Tareas
@@ -99,14 +169,16 @@ export function AppShell({ user, children }: AppShellProps) {
               )}
             </button>
 
-            <button
-              type="button"
-              disabled
-              title="Próximamente (fase 3)"
-              className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted opacity-60"
+            <Link
+              href="/app/insertar"
+              className={`rounded-lg border px-3 py-1.5 text-sm ${
+                isInsertPage
+                  ? "border-accent bg-accent text-white hover:bg-accent-hover"
+                  : "border-border hover:bg-background"
+              }`}
             >
               + Insertar
-            </button>
+            </Link>
 
             <div className="relative">
               <button
@@ -129,9 +201,23 @@ export function AppShell({ user, children }: AppShellProps) {
                       onClick={handleBackup}
                       className="mt-2 w-full rounded-md border border-border px-3 py-1.5 text-left text-sm hover:bg-background disabled:opacity-60"
                     >
-                      {backupState === "running" ? "Lanzando backup…" : "Lanzar backup"}
+                      {backupState === "running" ? "Backup en curso…" : "Lanzar backup"}
                     </button>
-                    {backupMessage && (
+                    {backupState === "running" && (
+                      <div className="mt-2">
+                        <div className="mb-1 flex items-center justify-between text-[10px] text-muted">
+                          <span>{backupMessage}</span>
+                          <span>{backupPercent}%</span>
+                        </div>
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-background">
+                          <div
+                            className="h-full rounded-full bg-accent transition-all duration-300"
+                            style={{ width: `${backupPercent}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    {backupMessage && backupState !== "running" && (
                       <p
                         className={`mt-2 text-xs ${
                           backupState === "error" ? "text-red-600" : "text-muted"
@@ -160,9 +246,9 @@ export function AppShell({ user, children }: AppShellProps) {
               key={tab.id}
               type="button"
               disabled={tab.disabled}
-              onClick={() => !tab.disabled && setActiveTab(tab.id)}
+              onClick={() => !tab.disabled && goHome(tab.id)}
               className={`relative rounded-lg px-4 py-2 text-sm font-medium transition ${
-                activeTab === tab.id
+                !isInsertPage && isHome && activeTab === tab.id
                   ? "bg-accent text-white"
                   : tab.disabled
                     ? "cursor-not-allowed text-muted opacity-50"
@@ -170,11 +256,6 @@ export function AppShell({ user, children }: AppShellProps) {
               }`}
             >
               {tab.label}
-              {tab.badge !== undefined && (
-                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-medium text-white">
-                  {tab.badge}
-                </span>
-              )}
             </button>
           ))}
           <button
@@ -189,15 +270,41 @@ export function AppShell({ user, children }: AppShellProps) {
       </header>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
-        {activeTab === "resumen" && children}
-        {activeTab === "ingresos" && <DashboardIngresos />}
-        {activeTab === "inversion" && <DashboardInversiones />}
-        {activeTab === "patrimonio" && <DashboardPatrimonio />}
-        {activeTab === "gastos" && <DashboardGastos />}
-        {activeTab === "tareas" && (
-          <PendingTasksPanel
-            onCountChange={setPendingCount}
-          />
+        {isInsertPage ? (
+          children
+        ) : (
+          <>
+            {visitedTabs.has("resumen") && (
+              <div className={activeTab === "resumen" ? undefined : "hidden"} key={dashboardRefresh}>
+                {children}
+              </div>
+            )}
+            {visitedTabs.has("ingresos") && (
+              <div className={activeTab === "ingresos" ? undefined : "hidden"}>
+                <DashboardIngresos key={dashboardRefresh} />
+              </div>
+            )}
+            {visitedTabs.has("inversion") && (
+              <div className={activeTab === "inversion" ? undefined : "hidden"}>
+                <DashboardInversiones key={dashboardRefresh} />
+              </div>
+            )}
+            {visitedTabs.has("patrimonio") && (
+              <div className={activeTab === "patrimonio" ? undefined : "hidden"}>
+                <DashboardPatrimonio key={dashboardRefresh} />
+              </div>
+            )}
+            {visitedTabs.has("gastos") && (
+              <div className={activeTab === "gastos" ? undefined : "hidden"}>
+                <DashboardGastos key={dashboardRefresh} />
+              </div>
+            )}
+            {visitedTabs.has("tareas") && (
+              <div className={activeTab === "tareas" ? undefined : "hidden"}>
+                <PendingTasksPanel onCountChange={setPendingCount} />
+              </div>
+            )}
+          </>
         )}
       </main>
     </div>

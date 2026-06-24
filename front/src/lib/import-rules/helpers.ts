@@ -1,12 +1,14 @@
 import type {
   ConditionKind,
+  DestinoRegla,
   ImportRule,
   RuleActions,
   RuleCondition,
   TablaDestino,
 } from "./types";
 
-export const DESTINO_GROUP_ORDER: (TablaDestino | "__sin_destino__")[] = [
+export const DESTINO_GROUP_ORDER: (TablaDestino | "__sin_destino__" | "__ignorar__")[] = [
+  "__ignorar__",
   "Gastos",
   "Ingresos",
   "Inversiones",
@@ -14,12 +16,17 @@ export const DESTINO_GROUP_ORDER: (TablaDestino | "__sin_destino__")[] = [
 ];
 
 export interface RuleDestinoGroup {
-  key: TablaDestino | "__sin_destino__";
+  key: TablaDestino | "__sin_destino__" | "__ignorar__";
   label: string;
   items: ImportRule[];
 }
 
-export function getRuleDestinoKey(rule: ImportRule): TablaDestino | "__sin_destino__" {
+export function isIgnorarRule(rule: ImportRule): boolean {
+  return rule.actions.ignorar === true;
+}
+
+export function getRuleDestinoKey(rule: ImportRule): TablaDestino | "__sin_destino__" | "__ignorar__" {
+  if (isIgnorarRule(rule)) return "__ignorar__";
   return rule.actions.tabla_destino ?? "__sin_destino__";
 }
 
@@ -44,7 +51,12 @@ export function groupRulesByDestino(rules: ImportRule[]): RuleDestinoGroup[] {
     if (!items?.length) continue;
     groups.push({
       key,
-      label: key === "__sin_destino__" ? "Sin destino" : key,
+      label:
+        key === "__sin_destino__"
+          ? "Sin destino"
+          : key === "__ignorar__"
+            ? "Ignorar (transferencias)"
+            : key,
       items: sortRules(items),
     });
     map.delete(key);
@@ -94,32 +106,52 @@ export function getConditionText(condition: RuleCondition): string {
   return "";
 }
 
+function inversionSuffix(rule: ImportRule): string {
+  return rule.actions.invertir_importe ? " · invierte signo" : "";
+}
+
 export function formatRuleSummary(rule: ImportRule): string {
   const kind = inferConditionKind(rule.condition);
+  if (isIgnorarRule(rule)) {
+    if (kind === "exacto") {
+      const text = rule.condition.concepto_exacto ?? "";
+      return `Si concepto = «${text}» → ignorar (transferencia)`;
+    }
+    if (kind === "contiene") {
+      const text = rule.condition.concepto_contiene ?? "";
+      return `Si concepto contiene «${text}» → ignorar (transferencia)`;
+    }
+    if (kind === "importe_positivo") return "Si importe positivo → ignorar (transferencia)";
+    return "Si importe negativo → ignorar (transferencia)";
+  }
+
   const dest = rule.actions.tabla_destino ?? "?";
+
+  const suffix = inversionSuffix(rule);
 
   if (kind === "exacto") {
     const text = rule.condition.concepto_exacto ?? "";
     if (dest === "Inversiones") {
       const parts = [rule.actions.tipo, rule.actions.nombre].filter(Boolean).join(" · ");
-      return `Si concepto = «${text}» → ${dest}${parts ? ` (${parts})` : ""}`;
+      return `Si concepto = «${text}» → ${dest}${parts ? ` (${parts})` : ""}${suffix}`;
     }
     if (dest === "Gastos" && rule.actions.categoria) {
-      return `Si concepto = «${text}» → ${dest} / ${rule.actions.categoria}`;
+      return `Si concepto = «${text}» → ${dest} / ${rule.actions.categoria}${suffix}`;
     }
-    return `Si concepto = «${text}» → ${dest}`;
+    return `Si concepto = «${text}» → ${dest}${suffix}`;
   }
 
   if (kind === "contiene") {
     const text = rule.condition.concepto_contiene ?? "";
-    return `Si concepto contiene «${text}» → ${dest}`;
+    return `Si concepto contiene «${text}» → ${dest}${suffix}`;
   }
 
-  if (kind === "importe_positivo") return `Si importe positivo → ${dest}`;
-  return `Si importe negativo → ${dest}`;
+  if (kind === "importe_positivo") return `Si importe positivo → ${dest}${suffix}`;
+  return `Si importe negativo → ${dest}${suffix}`;
 }
 
-export function emptyActionsForDestino(destino: TablaDestino | ""): RuleActions {
+export function emptyActionsForDestino(destino: TablaDestino | DestinoRegla | ""): RuleActions {
   if (!destino) return {};
+  if (destino === "__ignorar__") return { ignorar: true };
   return { tabla_destino: destino };
 }

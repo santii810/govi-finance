@@ -44,7 +44,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const client = new NocoDbClient(nocodbUrl, nocodbToken);
 
     if (action === "accept") {
-      const result = await acceptPending(client, id);
+      const result = await acceptPending(client, id, session.user.persona);
       return NextResponse.json({ ok: true, undo: result });
     }
 
@@ -54,7 +54,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     if (action === "modify") {
-      const result = await modifyPending(client, id, {
+      const result = await modifyPending(client, id, session.user.persona, {
         fecha: body.fecha,
         importe: body.importe,
         concepto: body.concepto,
@@ -69,7 +69,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     if (action === "undo") {
-      const item = await undoPending(client, id, {
+      const item = await undoPending(client, id, session.user.persona, {
         destTableId: body.destTableId,
         destRecordId: body.destRecordId,
       });

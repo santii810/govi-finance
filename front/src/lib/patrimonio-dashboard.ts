@@ -1,14 +1,16 @@
 import type { NocoDbClient } from "./nocodb";
+import { yearsFromDateBounds } from "./nocodb";
 import { TABLES } from "./config";
 import {
   attributedAmount,
   currentYearKey,
-  lastNYearsKeys,
+  getDateParts,
   parseAmount,
   parseDate,
   personaFilter,
-  yearKey,
 } from "./persona";
+import { resolvePeriodFilterRange } from "./period-filter";
+import { PATRIMONIO_FIELDS } from "./table-fields";
 import type {
   InmobiliarioRow,
   NamedAmount,
@@ -29,15 +31,25 @@ interface PatrimonioRecord {
   amount: number;
   tipo: string;
   nombre: string;
+  year: string;
 }
 
-function snapshotKey(date: Date, timezone: string): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
+function mapPatrimonio(records: Record<string, unknown>[], timezone: string): PatrimonioRecord[] {
+  return records
+    .map((r) => {
+      const date = parseDate(r.Fecha);
+      if (!date) return null;
+      const parts = getDateParts(date, timezone);
+      return {
+        date,
+        snapshotKey: parts.snapshotKey,
+        amount: attributedAmount(parseAmount(r.Valor), r.Persona),
+        tipo: String(r.Tipo ?? "Otro"),
+        nombre: String(r.Nombre ?? "Sin nombre"),
+        year: parts.year,
+      };
+    })
+    .filter((r): r is PatrimonioRecord => r !== null);
 }
 
 export function formatSnapshotLabel(key: string, timezone: string): string {
@@ -47,22 +59,6 @@ export function formatSnapshotLabel(key: string, timezone: string): string {
     month: "short",
     year: "2-digit",
   }).format(d);
-}
-
-function mapPatrimonio(records: Record<string, unknown>[], timezone: string): PatrimonioRecord[] {
-  return records
-    .map((r) => {
-      const date = parseDate(r.Fecha);
-      if (!date) return null;
-      return {
-        date,
-        snapshotKey: snapshotKey(date, timezone),
-        amount: attributedAmount(parseAmount(r.Valor), r.Persona),
-        tipo: String(r.Tipo ?? "Otro"),
-        nombre: String(r.Nombre ?? "Sin nombre"),
-      };
-    })
-    .filter((r): r is PatrimonioRecord => r !== null);
 }
 
 function groupBySnapshot(records: PatrimonioRecord[]): Map<string, PatrimonioRecord[]> {
@@ -101,21 +97,6 @@ function orderTipos(totals: Map<string, number>): NamedAmount[] {
     return a.localeCompare(b);
   });
   return keys.map((name) => ({ name, total: totals.get(name) ?? 0 }));
-}
-
-function collectTipoKeys(...lists: NamedAmount[][]): string[] {
-  const set = new Set<string>();
-  for (const list of lists) {
-    for (const item of list) set.add(item.name);
-  }
-  return [...set].sort((a, b) => {
-    const ia = TIPO_ORDER.indexOf(a);
-    const ib = TIPO_ORDER.indexOf(b);
-    const ra = ia === -1 ? TIPO_ORDER.length : ia;
-    const rb = ib === -1 ? TIPO_ORDER.length : ib;
-    if (ra !== rb) return ra - rb;
-    return a.localeCompare(b);
-  });
 }
 
 function sumByNombre(records: PatrimonioRecord[]): NamedAmount[] {
@@ -177,23 +158,8 @@ function resolveFilterRange(
   availableYears: string[],
   yearFrom?: string,
   yearTo?: string,
-  singleYear?: string,
-): { from: string; to: string; year?: string } {
-  if (mode === "year" && singleYear) {
-    return { from: singleYear, to: singleYear, year: singleYear };
-  }
-  if (mode === "last5") {
-    const { from, to } = lastNYearsKeys(timezone, 5);
-    return { from, to };
-  }
-  if (mode === "range" && yearFrom && yearTo) {
-    const from = yearFrom <= yearTo ? yearFrom : yearTo;
-    const to = yearFrom <= yearTo ? yearTo : yearFrom;
-    return { from, to };
-  }
-  const from = availableYears[0] ?? currentYearKey(timezone);
-  const to = availableYears[availableYears.length - 1] ?? currentYearKey(timezone);
-  return { from, to };
+): { from: string; to: string } {
+  return resolvePeriodFilterRange(mode, timezone, availableYears, yearFrom, yearTo);
 }
 
 function filterSnapshotsByYears(
@@ -201,13 +167,33 @@ function filterSnapshotsByYears(
   groups: Map<string, PatrimonioRecord[]>,
   from: string,
   to: string,
-  timezone: string,
 ): string[] {
   return keys.filter((key) => {
     const sample = groups.get(key)?.[0];
     if (!sample) return false;
-    const y = yearKey(sample.date, timezone);
-    return y >= from && y <= to;
+    return sample.year >= from && sample.year <= to;
+  });
+}
+
+function collectTipoKeysFromSnapshots(
+  keys: string[],
+  groups: Map<string, PatrimonioRecord[]>,
+  latestByTipo: NamedAmount[],
+): string[] {
+  const set = new Set<string>();
+  for (const item of latestByTipo) set.add(item.name);
+  for (const key of keys) {
+    for (const record of groups.get(key) ?? []) {
+      set.add(record.tipo);
+    }
+  }
+  return [...set].sort((a, b) => {
+    const ia = TIPO_ORDER.indexOf(a);
+    const ib = TIPO_ORDER.indexOf(b);
+    const ra = ia === -1 ? TIPO_ORDER.length : ia;
+    const rb = ib === -1 ? TIPO_ORDER.length : ib;
+    if (ra !== rb) return ra - rb;
+    return a.localeCompare(b);
   });
 }
 
@@ -234,19 +220,21 @@ export async function fetchPatrimonio(
   mode: PatrimonioFilterMode = "all",
   yearFrom?: string,
   yearTo?: string,
-  singleYear?: string,
 ): Promise<PatrimonioData> {
   const where = personaFilter(persona);
-  const raw = await client.listRecords(TABLES.patrimonio, where);
+  const bounds = await client.availableYears(TABLES.patrimonio, "Fecha", where);
+  const availableYears = yearsFromDateBounds(bounds.min, bounds.max, timezone, currentYearKey(timezone));
+
+  const raw = await client.listRecords(TABLES.patrimonio, {
+    where,
+    fields: [...PATRIMONIO_FIELDS],
+  });
   const all = mapPatrimonio(raw, timezone);
   const groups = groupBySnapshot(all);
   const snapshotKeys = sortedSnapshotKeys(groups);
 
-  const yearSet = new Set(snapshotKeys.map((k) => yearKey(groups.get(k)![0].date, timezone)));
-  const availableYears = [...yearSet].sort();
-
-  const filter = resolveFilterRange(mode, timezone, availableYears, yearFrom, yearTo, singleYear);
-  const filteredKeys = filterSnapshotsByYears(snapshotKeys, groups, filter.from, filter.to, timezone);
+  const filter = resolveFilterRange(mode, timezone, availableYears, yearFrom, yearTo);
+  const filteredKeys = filterSnapshotsByYears(snapshotKeys, groups, filter.from, filter.to);
 
   const latestKey = snapshotKeys[snapshotKeys.length - 1];
   const previousKey = snapshotKeys.length >= 2 ? snapshotKeys[snapshotKeys.length - 2] : null;
@@ -272,10 +260,7 @@ export async function fetchPatrimonio(
     total: sumRecords(groups.get(key) ?? []),
   }));
 
-  const tipoKeys = collectTipoKeys(
-    byTipo,
-    ...filteredKeys.map((k) => sumByTipo(groups.get(k) ?? [])),
-  );
+  const tipoKeys = collectTipoKeysFromSnapshots(filteredKeys, groups, byTipo);
 
   const evolutionByTipo = buildEvolutionByTipo(filteredKeys, groups, timezone, tipoKeys);
 

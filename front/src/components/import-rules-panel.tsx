@@ -9,9 +9,11 @@ import {
   getConditionText,
   groupRulesByDestino,
   inferConditionKind,
+  isIgnorarRule,
 } from "@/lib/import-rules/helpers";
 import type {
   ConditionKind,
+  DestinoRegla,
   ImportRule,
   ImportRuleInput,
   RuleScope,
@@ -32,7 +34,7 @@ interface RuleFormState {
   nombre: string;
   conditionKind: ConditionKind;
   conditionText: string;
-  tablaDestino: TablaDestino | "";
+  tablaDestino: DestinoRegla | "";
   categoria: string;
   tipo: string;
   nombreActivo: string;
@@ -41,6 +43,7 @@ interface RuleFormState {
   cuenta: string;
   prioridad: string;
   activa: boolean;
+  invertirImporte: boolean;
 }
 
 function emptyForm(): RuleFormState {
@@ -57,6 +60,7 @@ function emptyForm(): RuleFormState {
     cuenta: "",
     prioridad: String(DEFAULT_PRIORITY.exacto),
     activa: true,
+    invertirImporte: false,
   };
 }
 
@@ -66,7 +70,9 @@ function formFromRule(rule: ImportRule): RuleFormState {
     nombre: rule.nombre,
     conditionKind: kind,
     conditionText: getConditionText(rule.condition),
-    tablaDestino: rule.actions.tabla_destino ?? "",
+    tablaDestino: isIgnorarRule(rule)
+      ? "__ignorar__"
+      : (rule.actions.tabla_destino ?? ""),
     categoria: rule.actions.categoria ?? "",
     tipo: rule.actions.tipo ?? "",
     nombreActivo: rule.actions.nombre ?? "",
@@ -75,13 +81,15 @@ function formFromRule(rule: ImportRule): RuleFormState {
     cuenta: rule.accountId ?? "",
     prioridad: String(rule.priority),
     activa: rule.active,
+    invertirImporte: rule.actions.invertir_importe === true,
   };
 }
 
 function formToInput(form: RuleFormState): ImportRuleInput {
-  const actions: ImportRuleInput["actions"] = {
-    tabla_destino: form.tablaDestino as TablaDestino,
-  };
+  const actions: ImportRuleInput["actions"] =
+    form.tablaDestino === "__ignorar__"
+      ? { ignorar: true }
+      : { tabla_destino: form.tablaDestino as TablaDestino };
 
   if (form.tablaDestino === "Gastos" && form.categoria) {
     actions.categoria = form.categoria;
@@ -90,6 +98,9 @@ function formToInput(form: RuleFormState): ImportRuleInput {
     if (form.tipo) actions.tipo = form.tipo;
     if (form.nombreActivo) actions.nombre = form.nombreActivo;
     if (form.entidad) actions.entidad = form.entidad;
+  }
+  if (form.invertirImporte) {
+    actions.invertir_importe = true;
   }
 
   return {
@@ -305,13 +316,13 @@ export function ImportRulesPanel({
           )}
 
           <label className="flex flex-col gap-1">
-            <span className="text-xs text-muted">Tabla destino</span>
+            <span className="text-xs text-muted">Destino</span>
             <select
               value={form.tablaDestino}
               onChange={(e) =>
                 setForm((f) => ({
                   ...f,
-                  tablaDestino: e.target.value as TablaDestino | "",
+                  tablaDestino: e.target.value as DestinoRegla | "",
                   categoria: "",
                   tipo: "",
                   nombreActivo: "",
@@ -321,6 +332,7 @@ export function ImportRulesPanel({
               className="rounded-md border border-border bg-card px-3 py-2 text-sm"
             >
               <option value="">— seleccionar —</option>
+              <option value="__ignorar__">Ignorar (transferencia interna)</option>
               {(fieldOptions?.tablaDestino ?? ["Gastos", "Ingresos", "Inversiones"]).map((t) => (
                 <option key={t} value={t}>
                   {t}
@@ -329,7 +341,7 @@ export function ImportRulesPanel({
             </select>
           </label>
 
-          {form.tablaDestino === "Gastos" && (
+          {form.tablaDestino !== "__ignorar__" && form.tablaDestino === "Gastos" && (
             <label className="flex flex-col gap-1">
               <span className="text-xs text-muted">Categoría</span>
               <select
@@ -434,6 +446,18 @@ export function ImportRulesPanel({
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
+              checked={form.invertirImporte}
+              onChange={(e) => setForm((f) => ({ ...f, invertirImporte: e.target.checked }))}
+            />
+            Invertir cantidad
+            <span className="text-xs text-muted">
+              (multiplica el importe por −1; útil si el banco registra inversiones como gastos)
+            </span>
+          </label>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
               checked={form.activa}
               onChange={(e) => setForm((f) => ({ ...f, activa: e.target.checked }))}
             />
@@ -534,6 +558,7 @@ export function ImportRulesPanel({
                               <span className="font-medium">{rule.nombre}</span>
                               <span className="text-xs text-muted">
                                 {rule.scope} · prioridad {rule.priority}
+                                {rule.actions.invertir_importe ? " · invierte signo" : ""}
                               </span>
                             </div>
                             <p className="mt-1 text-sm text-muted">{formatRuleSummary(rule)}</p>

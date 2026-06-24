@@ -8,10 +8,10 @@ import type {
   TablaDestino,
 } from "./types";
 
-function applyGlobalSignRule(movement: PendingMovement): Classification {
-  const tablaDestino: TablaDestino = movement.importe > 0 ? "Ingresos" : "Gastos";
+function applyBaseline(movement: PendingMovement): Classification {
   return {
-    tablaDestino,
+    tablaDestino: null,
+    ignorar: false,
     categoria: null,
     tipo: null,
     nombre: null,
@@ -25,19 +25,64 @@ export function normalizeConcepto(value: string): string {
   return value.trim().toLowerCase();
 }
 
+function matchConceptoRegex(concepto: string, pattern: string): RegExpMatchArray | null {
+  try {
+    return concepto.match(new RegExp(pattern, "i"));
+  } catch {
+    return null;
+  }
+}
+
+function extractNombreFromRegex(concepto: string, condition: RuleCondition): string | null {
+  const pattern = condition.concepto_regex;
+  if (!pattern) return null;
+  const match = matchConceptoRegex(concepto, pattern);
+  if (!match) return null;
+  const group = condition.nombre_grupo ?? 1;
+  const value = match[group];
+  return value?.trim() || null;
+}
+
 export function applyRules(movement: PendingMovement, rules: ImportRule[]): Classification {
-  let classified = applyGlobalSignRule(movement);
+  return applyRulesWithMeta(movement, rules).classification;
+}
+
+export interface RuleMatchResult {
+  classification: Classification;
+  reglaId: string | null;
+  reglaNombre: string | null;
+  reglaPrioridad: number;
+}
+
+/** Clasifica un movimiento y devuelve la regla de mayor prioridad que coincidió. */
+export function applyRulesWithMeta(
+  movement: PendingMovement,
+  rules: ImportRule[],
+): RuleMatchResult {
+  let classified = applyBaseline(movement);
   const accountId = movement.metadata.account_id ?? "";
+  let lastMatched: ImportRule | null = null;
 
   const applicable = rules
     .filter((rule) => rule.active && ruleMatches(rule, movement, accountId))
     .sort((a, b) => a.priority - b.priority);
 
   for (const rule of applicable) {
-    classified = applyActions(classified, rule.actions);
+    let actions = rule.actions;
+    const extractedNombre = extractNombreFromRegex(movement.concepto, rule.condition);
+    if (extractedNombre !== null && actions.nombre === undefined) {
+      actions = { ...actions, nombre: extractedNombre };
+    }
+    classified = applyActions(classified, actions);
+    lastMatched = rule;
   }
 
-  return classified;
+  return {
+    classification: classified,
+    reglaId: lastMatched?.id ?? null,
+    reglaNombre: lastMatched?.nombre ?? null,
+    reglaPrioridad: lastMatched?.priority ?? -1,
+  };
 }
 
 function ruleMatches(rule: ImportRule, movement: PendingMovement, accountId: string): boolean {
@@ -60,6 +105,11 @@ function ruleMatches(rule: ImportRule, movement: PendingMovement, accountId: str
 
   const contains = condition.concepto_contiene;
   if (contains && !movement.concepto.toLowerCase().includes(contains.toLowerCase())) {
+    return false;
+  }
+
+  const regex = condition.concepto_regex;
+  if (regex && !matchConceptoRegex(movement.concepto, regex)) {
     return false;
   }
 
@@ -92,6 +142,7 @@ function ruleMatches(rule: ImportRule, movement: PendingMovement, accountId: str
 }
 
 function applyActions(classified: Classification, actions: RuleActions): Classification {
+  const ignorar = actions.ignorar === true ? true : classified.ignorar;
   const tablaDestino = actions.tabla_destino ?? classified.tablaDestino;
   const persona = actions.persona ?? classified.persona;
   const categoria = actions.categoria !== undefined ? actions.categoria : classified.categoria;
@@ -102,10 +153,13 @@ function applyActions(classified: Classification, actions: RuleActions): Classif
   let importe = classified.importe;
   if (actions.importe_signo) {
     const sign = actions.importe_signo === "positivo" ? 1 : -1;
-    importe = Math.abs(classified.importe) * sign;
+    importe = Math.abs(importe) * sign;
+  }
+  if (actions.invertir_importe) {
+    importe = importe * -1;
   }
 
-  return { tablaDestino, persona, categoria, tipo, nombre, entidad, importe };
+  return { tablaDestino, ignorar, persona, categoria, tipo, nombre, entidad, importe };
 }
 
 export function parseJsonField<T>(value: unknown): T {

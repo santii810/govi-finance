@@ -23,8 +23,8 @@ export const NAME_COLORS = [
   "#64748b",
 ];
 
-export function colorMapForKeys(keys: string[], palette = NAME_COLORS): Record<string, string> {
-  return Object.fromEntries(keys.map((k, i) => [k, palette[i % palette.length]]));
+export function colorMapForKeys(keys: string[]): Record<string, string> {
+  return Object.fromEntries(keys.map((k, i) => [k, categoryColor(k, i)]));
 }
 
 export function categoryColor(name: string, index = 0): string {

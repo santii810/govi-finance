@@ -1,3 +1,4 @@
+import type { PersonaValue } from "./import-rules/types";
 import type { Persona } from "./types";
 
 const COMMON_FACTOR = 0.5;
@@ -6,9 +7,25 @@ export function personaFilter(persona: Persona): string {
   return `(Persona,in,${persona},Común)`;
 }
 
+/** ImportRules son personales: solo las del usuario logueado (sin Común). */
+export function importRulesPersonaFilter(persona: Persona): string {
+  return `(Persona,eq,${persona})`;
+}
+
 export function isVisible(recordPersona: unknown, userPersona: Persona): boolean {
   if (recordPersona === userPersona || recordPersona === "Común") return true;
   return false;
+}
+
+export function isImportRuleVisible(recordPersona: unknown, userPersona: Persona): boolean {
+  return recordPersona === userPersona;
+}
+
+export function filterByPersona<T extends { persona: PersonaValue }>(
+  items: T[],
+  userPersona: Persona,
+): T[] {
+  return items.filter((item) => isVisible(item.persona, userPersona));
 }
 
 export function attributedAmount(importe: number, recordPersona: unknown): number {
@@ -40,20 +57,54 @@ export function formatEur(amount: number): string {
   }).format(amount);
 }
 
+export interface DateParts {
+  year: string;
+  month: string;
+  monthIndex: number;
+  day: number;
+  monthKey: string;
+  snapshotKey: string;
+}
+
+const datePartsFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function getDatePartsFormatter(timezone: string): Intl.DateTimeFormat {
+  let formatter = datePartsFormatters.get(timezone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    datePartsFormatters.set(timezone, formatter);
+  }
+  return formatter;
+}
+
+/** Partes de fecha en zona horaria — una sola llamada a Intl por registro. */
+export function getDateParts(date: Date, timezone: string): DateParts {
+  const parts = getDatePartsFormatter(timezone).formatToParts(date);
+  const year = parts.find((p) => p.type === "year")?.value ?? "0000";
+  const month = parts.find((p) => p.type === "month")?.value ?? "01";
+  const dayStr = parts.find((p) => p.type === "day")?.value ?? "01";
+  const day = Number(dayStr);
+  return {
+    year,
+    month,
+    monthIndex: Number(month) - 1,
+    day,
+    monthKey: `${year}-${month}`,
+    snapshotKey: `${year}-${month}-${dayStr}`,
+  };
+}
+
 export function yearKey(date: Date, timezone: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-  }).formatToParts(date);
-  return parts.find((p) => p.type === "year")?.value ?? "0000";
+  return getDateParts(date, timezone).year;
 }
 
 export function monthIndex(date: Date, timezone: string): number {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    month: "numeric",
-  }).formatToParts(date);
-  return Number(parts.find((p) => p.type === "month")?.value ?? 1) - 1;
+  return getDateParts(date, timezone).monthIndex;
 }
 
 export function currentYearKey(timezone: string): string {
@@ -66,16 +117,18 @@ export function lastNYearsKeys(timezone: string, n: number): { from: string; to:
   return { from, to };
 }
 
-export function monthKey(date: Date, timezone: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-  }).formatToParts(date);
+function getMonthKeyFormatter(timezone: string): Intl.DateTimeFormat {
+  return getDatePartsFormatter(timezone);
+}
 
+function monthKeyFromParts(parts: Intl.DateTimeFormatPart[]): string {
   const year = parts.find((p) => p.type === "year")?.value ?? "0000";
   const month = parts.find((p) => p.type === "month")?.value ?? "01";
   return `${year}-${month}`;
+}
+
+export function monthKey(date: Date, timezone: string): string {
+  return getDateParts(date, timezone).monthKey;
 }
 
 export function monthLabel(key: string): string {
@@ -120,8 +173,33 @@ export function sumInMonth(
   monthKeyStr: string,
   timezone: string,
 ): number {
-  return records.reduce((sum, r) => {
-    if (!r.date || !isInMonth(r.date, monthKeyStr, timezone)) return sum;
-    return sum + r.amount;
-  }, 0);
+  return aggregateByMonth(records, timezone)[monthKeyStr] ?? 0;
+}
+
+/** Suma importes por mes en una sola pasada (evita rescans repetidos con Intl). */
+export function aggregateByMonth(
+  records: { date: Date | null; amount: number }[],
+  timezone: string,
+): Record<string, number> {
+  const formatter = getMonthKeyFormatter(timezone);
+  const totals: Record<string, number> = {};
+
+  for (const record of records) {
+    if (!record.date) continue;
+    const key = monthKeyFromParts(formatter.formatToParts(record.date));
+    totals[key] = (totals[key] ?? 0) + record.amount;
+  }
+
+  return totals;
+}
+
+export function yearBoundsIso(fromYear: string, toYear: string): { from: string; to: string } {
+  const from = fromYear <= toYear ? fromYear : toYear;
+  const to = fromYear <= toYear ? toYear : fromYear;
+  return { from: `${from}-01-01`, to: `${to}-12-31` };
+}
+
+/** Primer día del mes N meses atrás (p. ej. resumen: últimos 13 meses). */
+export function monthStartIso(timezone: string, offsetMonths: number): string {
+  return `${getMonthRange(timezone, offsetMonths).key}-01`;
 }

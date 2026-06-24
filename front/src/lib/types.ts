@@ -29,7 +29,9 @@ export interface ResumenData {
   chart: MonthlyBar[];
 }
 
-export type IngresosFilterMode = "all" | "last5" | "range" | "year";
+export type { PeriodFilterMode } from "@/lib/period-filter";
+
+export type IngresosFilterMode = import("@/lib/period-filter").PeriodFilterMode;
 
 export interface IngresosMetrics {
   periodTotal: number;
@@ -58,18 +60,31 @@ export interface IngresosHeatmapRow {
   months: number[];
 }
 
+export interface IngresosPivot {
+  origenKeys: string[];
+  rows: IngresosPivotRow[];
+  details: Record<string, import("@/lib/pivot-drilldown").PivotDrilldownMove[]>;
+}
+
 export interface IngresosData {
   metrics: IngresosMetrics;
   availableYears: string[];
   yearlyLine: IngresosYearPoint[];
   byOrigen: NamedAmount[];
   byCategoria: NamedAmount[];
-  pivot: { origenKeys: string[]; rows: IngresosPivotRow[] };
+  pivot: IngresosPivot;
   heatmap: IngresosHeatmapRow[];
-  filter: { mode: IngresosFilterMode; from: string; to: string; year?: string };
+  heatmapDetails: Record<string, import("@/lib/pivot-drilldown").PivotDrilldownMove[]>;
+  filter: { mode: IngresosFilterMode; from: string; to: string };
 }
 
 export type InversionesFilterMode = IngresosFilterMode;
+
+export interface InversionesPivot {
+  entidadKeys: string[];
+  rows: IngresosPivotRow[];
+  details: Record<string, import("@/lib/pivot-drilldown").PivotDrilldownMove[]>;
+}
 
 export interface InversionesData {
   metrics: IngresosMetrics;
@@ -78,9 +93,9 @@ export interface InversionesData {
   byEntidad: NamedAmount[];
   byTipo: NamedAmount[];
   byNombre: NamedAmount[];
-  pivot: { entidadKeys: string[]; rows: IngresosPivotRow[] };
+  pivot: InversionesPivot;
   heatmap: IngresosHeatmapRow[];
-  filter: { mode: InversionesFilterMode; from: string; to: string; year?: string };
+  filter: { mode: InversionesFilterMode; from: string; to: string };
 }
 
 export type PatrimonioFilterMode = IngresosFilterMode;
@@ -123,7 +138,7 @@ export interface PatrimonioData {
   evolutionByTipo: PatrimonioTipoSnapshotRow[];
   tipoKeys: string[];
   availableYears: string[];
-  filter: { mode: PatrimonioFilterMode; from: string; to: string; year?: string };
+  filter: { mode: PatrimonioFilterMode; from: string; to: string };
 }
 
 export type GastosSubTab =
@@ -134,7 +149,7 @@ export type GastosSubTab =
   | "viajes"
   | "restauracion";
 
-export type GastosFilterMode = "current" | "all" | "last5" | "range";
+export type GastosFilterMode = import("@/lib/period-filter").PeriodFilterMode;
 
 export interface GastosYtdComparison {
   delta: number;
@@ -178,17 +193,61 @@ export interface GastosViajeYearBlock {
   trips: { nombre: string; total: number }[];
 }
 
+export interface GastosViajesStackedYearRow {
+  year: string;
+  total: number;
+  /** Importe por ubicación (claves dinámicas para Recharts). */
+  [ubicacion: string]: number | string;
+}
+
+export interface GastosPivotMove {
+  date: string;
+  destino: string;
+  amount: number;
+  categoria: string;
+}
+
+/** @deprecated Usar PivotDrilldownMove desde pivot-drilldown */
+export type { PivotDrilldownMove } from "@/lib/pivot-drilldown";
+
+export interface GastosViajesPivotRow {
+  ubicacion: string;
+  byCategoria: Record<string, number>;
+  total: number;
+}
+
+export interface GastosViajesPivot {
+  categorias: string[];
+  rows: GastosViajesPivotRow[];
+  colTotals: Record<string, number>;
+  grandTotal: number;
+}
+
 export interface GastosViajesData {
   total: number;
   tripCount: number;
   ytdComparison: GastosYtdComparison | null;
   tripsByYear: GastosViajeYearBlock[];
+  stackedByYear: GastosViajesStackedYearRow[];
+  ubicacionKeys: string[];
+  pivot: GastosViajesPivot;
+}
+
+export interface GastosRestauracionTicket {
+  concept: string;
+  amount: number;
 }
 
 export interface GastosRestauracionMonthStack {
   monthKey: string;
   monthLabel: string;
-  tickets: number[];
+  tickets: GastosRestauracionTicket[];
+}
+
+export interface GastosRankingSite {
+  name: string;
+  total: number;
+  count: number;
 }
 
 export interface GastosRestauracionData {
@@ -197,6 +256,9 @@ export interface GastosRestauracionData {
   ytdComparison: GastosYtdComparison | null;
   stackedByMonth: GastosRestauracionMonthStack[];
   monthlySummary: { monthLabel: string; total: number; tickets: number }[];
+  topByVisits: NamedAmount[];
+  topBySpending: GastosRankingSite[];
+  topExpensiveMeals: NamedAmount[];
   recentMoves: GastosMove[];
 }
 
