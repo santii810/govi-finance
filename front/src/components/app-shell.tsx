@@ -27,9 +27,12 @@ export function AppShell({ user, children }: AppShellProps) {
   const [visitedTabs, setVisitedTabs] = useState<Set<Tab>>(() => new Set(["resumen"]));
   const [menuOpen, setMenuOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
-  const [backupState, setBackupState] = useState<"idle" | "running" | "ok" | "error">("idle");
+  const [backupState, setBackupState] = useState<"idle" | "running" | "ready" | "error">("idle");
   const [backupMessage, setBackupMessage] = useState("");
   const [backupPercent, setBackupPercent] = useState(0);
+  const [backupArchive, setBackupArchive] = useState<string | null>(null);
+  const [uploadState, setUploadState] = useState<"idle" | "running" | "ok" | "error">("idle");
+  const [uploadMessage, setUploadMessage] = useState("");
   const [dashboardRefresh, setDashboardRefresh] = useState(0);
   const prevPathRef = useRef(pathname);
 
@@ -80,10 +83,47 @@ export function AppShell({ user, children }: AppShellProps) {
     router.refresh();
   }
 
+  async function pollBackupStatus(
+    onUpdate: (status: {
+      running?: boolean;
+      percent?: number;
+      message?: string;
+      archive?: string;
+      error?: string;
+    }) => void,
+  ): Promise<"done" | "error" | "timeout"> {
+    for (let attempt = 0; attempt < 600; attempt += 1) {
+      await sleep(400);
+      const statusRes = await fetch("/api/backup/status", { cache: "no-store" });
+      const status = (await statusRes.json()) as {
+        running?: boolean;
+        percent?: number;
+        message?: string;
+        archive?: string;
+        error?: string;
+      };
+
+      if (!statusRes.ok) {
+        onUpdate({ error: status.error ?? "Error al consultar el progreso" });
+        return "error";
+      }
+
+      onUpdate(status);
+
+      if (!status.running) {
+        return status.error ? "error" : "done";
+      }
+    }
+    return "timeout";
+  }
+
   async function handleBackup() {
     setBackupState("running");
     setBackupPercent(0);
     setBackupMessage("Iniciando…");
+    setBackupArchive(null);
+    setUploadState("idle");
+    setUploadMessage("");
 
     try {
       const startRes = await fetch("/api/backup/run", { method: "POST" });
@@ -94,44 +134,86 @@ export function AppShell({ user, children }: AppShellProps) {
         return;
       }
 
-      for (let attempt = 0; attempt < 600; attempt += 1) {
-        await sleep(400);
-        const statusRes = await fetch("/api/backup/status", { cache: "no-store" });
-        const status = (await statusRes.json()) as {
-          running?: boolean;
-          percent?: number;
-          message?: string;
-          archive?: string;
-          error?: string;
-        };
-
-        if (!statusRes.ok) {
-          setBackupState("error");
-          setBackupMessage(status.error ?? "Error al consultar el progreso");
-          return;
-        }
-
+      const result = await pollBackupStatus((status) => {
         setBackupPercent(status.percent ?? 0);
         setBackupMessage(status.message ?? "Procesando…");
+      });
 
-        if (!status.running) {
-          if (status.error) {
-            setBackupState("error");
-            setBackupMessage(status.error);
-          } else {
-            setBackupState("ok");
-            setBackupPercent(100);
-            setBackupMessage(`Listo: ${status.archive ?? "backup subido"}`);
-          }
-          return;
-        }
+      if (result === "error") {
+        setBackupState("error");
+        const statusRes = await fetch("/api/backup/status", { cache: "no-store" });
+        const status = (await statusRes.json()) as { error?: string; message?: string };
+        setBackupMessage(status.error ?? status.message ?? "Error en el backup");
+        return;
       }
 
-      setBackupState("error");
-      setBackupMessage("El backup tardó demasiado");
+      if (result === "timeout") {
+        setBackupState("error");
+        setBackupMessage("El backup tardó demasiado");
+        return;
+      }
+
+      const statusRes = await fetch("/api/backup/status", { cache: "no-store" });
+      const status = (await statusRes.json()) as { archive?: string };
+      setBackupState("ready");
+      setBackupPercent(100);
+      setBackupMessage("Backup listo");
+      setBackupArchive(status.archive ?? null);
     } catch {
       setBackupState("error");
       setBackupMessage("Error de conexión con el servicio de backup");
+    }
+  }
+
+  function handleDownload() {
+    if (!backupArchive) return;
+    window.location.assign(
+      `/api/backup/download?archive=${encodeURIComponent(backupArchive)}`,
+    );
+  }
+
+  async function handleUploadToDrive() {
+    if (!backupArchive) return;
+
+    setUploadState("running");
+    setUploadMessage("Iniciando subida…");
+
+    try {
+      const startRes = await fetch("/api/backup/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archive: backupArchive }),
+      });
+      const startJson = (await startRes.json()) as { error?: string };
+      if (!startRes.ok) {
+        setUploadState("error");
+        setUploadMessage(startJson.error ?? "No se pudo iniciar la subida");
+        return;
+      }
+
+      const result = await pollBackupStatus((status) => {
+        setUploadMessage(status.message ?? "Subiendo…");
+      });
+
+      if (result === "error") {
+        setUploadState("error");
+        const statusRes = await fetch("/api/backup/status", { cache: "no-store" });
+        const status = (await statusRes.json()) as { error?: string; message?: string };
+        setUploadMessage(status.error ?? status.message ?? "Error al subir");
+        return;
+      }
+
+      if (result === "timeout") {
+        setUploadState("error");
+        setUploadMessage("La subida tardó demasiado");
+        return;
+      }
+
+      setUploadState("ok");
+      setUploadMessage("Subido a Google Drive");
+    } catch {
+      setUploadState("error");
+      setUploadMessage("Error de conexión con el servicio de backup");
     }
   }
 
@@ -193,11 +275,11 @@ export function AppShell({ user, children }: AppShellProps) {
                   <div className="border-b border-border px-4 py-2">
                     <p className="text-xs font-medium text-muted">Backup</p>
                     <p className="mt-1 text-xs text-muted">
-                      Exporta NocoDB y sube a Google Drive.
+                      Exporta NocoDB. Al terminar puedes descargarlo o subirlo a Drive.
                     </p>
                     <button
                       type="button"
-                      disabled={backupState === "running"}
+                      disabled={backupState === "running" || uploadState === "running"}
                       onClick={handleBackup}
                       className="mt-2 w-full rounded-md border border-border px-3 py-1.5 text-left text-sm hover:bg-background disabled:opacity-60"
                     >
@@ -217,6 +299,25 @@ export function AppShell({ user, children }: AppShellProps) {
                         </div>
                       </div>
                     )}
+                    {backupState === "ready" && backupArchive && (
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={handleDownload}
+                          className="flex-1 rounded-md border border-border px-2 py-1.5 text-xs hover:bg-background"
+                        >
+                          Descargar
+                        </button>
+                        <button
+                          type="button"
+                          disabled={uploadState === "running"}
+                          onClick={handleUploadToDrive}
+                          className="flex-1 rounded-md border border-border px-2 py-1.5 text-xs hover:bg-background disabled:opacity-60"
+                        >
+                          {uploadState === "running" ? "Subiendo…" : "Subir a Drive"}
+                        </button>
+                      </div>
+                    )}
                     {backupMessage && backupState !== "running" && (
                       <p
                         className={`mt-2 text-xs ${
@@ -224,6 +325,15 @@ export function AppShell({ user, children }: AppShellProps) {
                         }`}
                       >
                         {backupMessage}
+                      </p>
+                    )}
+                    {uploadMessage && (
+                      <p
+                        className={`mt-1 text-xs ${
+                          uploadState === "error" ? "text-red-600" : "text-muted"
+                        }`}
+                      >
+                        {uploadMessage}
                       </p>
                     )}
                   </div>

@@ -25,6 +25,17 @@ def create_zip(export_dir: Path, staging_dir: Path) -> Path:
     return archive_path
 
 
+def resolve_archive(staging_dir: Path, name: str) -> Path | None:
+    if not name or "/" in name or "\\" in name or ".." in name:
+        return None
+    if not name.startswith("finanzas-nocodb-") or not name.endswith(".zip"):
+        return None
+    path = staging_dir / name
+    if path.is_file():
+        return path
+    return None
+
+
 def prune_local_backups(staging_dir: Path, keep: int) -> None:
     archives = sorted(
         staging_dir.glob("finanzas-nocodb-*.zip"),

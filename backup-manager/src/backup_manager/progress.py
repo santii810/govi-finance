@@ -70,6 +70,24 @@ class BackupProgress:
             self._archive = archive_name
             self._error = None
 
+    def start_upload(self, archive_name: str) -> None:
+        with self._lock:
+            self._running = True
+            self._percent = 10
+            self._phase = "upload"
+            self._message = "Subiendo a Google Drive…"
+            self._archive = archive_name
+            self._error = None
+
+    def complete_upload(self, archive_name: str, message: str) -> None:
+        with self._lock:
+            self._running = False
+            self._percent = 100
+            self._phase = "uploaded"
+            self._message = message
+            self._archive = archive_name
+            self._error = None
+
     def fail(self, error: str) -> None:
         with self._lock:
             self._running = False
