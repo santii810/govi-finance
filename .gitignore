@@ -50,7 +50,13 @@ Thumbs.db
 *.swp
 *.swo
 *~
-Finanzas.xlsx
+
+# Excels históricos / personales (raíz del repo)
+Finanzas*.xlsx
 GastosComún.xlsx
+
+# Scripts temporales de depuración
+tmp-*
+
 .vscode/mcp.json
 govi-finance/
