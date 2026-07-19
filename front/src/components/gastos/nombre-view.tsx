@@ -8,8 +8,10 @@ import {
   Tooltip,
   XAxis,
   YAxis,
+  type TooltipProps,
 } from "recharts";
 import { TotalApuntadoCard } from "@/components/gastos/total-apuntado-card";
+import { GastosMetricCard } from "@/components/gastos/gastos-metric-card";
 import { SwitchableDistributionChart } from "@/components/ingresos/switchable-distribution-chart";
 import { MONTHS } from "@/components/ingresos/year-filter";
 import { useGastosDrilldown } from "@/components/gastos/use-gastos-drilldown";
@@ -24,6 +26,43 @@ interface NombreViewProps {
   sectionLabel: string;
   showMonthlyTable: boolean;
   filterQuery: string;
+}
+
+interface EvolutionChartRow {
+  month: string;
+  total: number;
+  previous: number | null;
+}
+
+function EvolutionTooltip({
+  active,
+  payload,
+  label,
+  currentLabel,
+  previousLabel,
+}: TooltipProps<number, string> & { currentLabel: string; previousLabel: string | null }) {
+  if (!active || !payload?.length) return null;
+
+  const row = payload[0]?.payload as EvolutionChartRow | undefined;
+  if (!row) return null;
+
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-sm">
+      <p className="mb-2 font-medium text-foreground">{label}</p>
+      <ul className="space-y-1">
+        <li className="flex items-baseline justify-between gap-4">
+          <span className="text-muted">{currentLabel}</span>
+          <span className="shrink-0 tabular-nums text-foreground">{formatEur(row.total)}</span>
+        </li>
+        {row.previous != null && row.previous > 0 && previousLabel && (
+          <li className="flex items-baseline justify-between gap-4">
+            <span className="text-muted">{previousLabel}</span>
+            <span className="shrink-0 tabular-nums text-muted">{formatEur(row.previous)}</span>
+          </li>
+        )}
+      </ul>
+    </div>
+  );
 }
 
 function MovesTable({ moves }: { moves: GastosMove[] }) {
@@ -55,17 +94,19 @@ function MovesTable({ moves }: { moves: GastosMove[] }) {
 }
 
 export function NombreView({ data, sectionLabel, showMonthlyTable, filterQuery }: NombreViewProps) {
-  const { selection, moves, loading, error, openCell, close } = useGastosDrilldown({
+  const { selection, moves, loading, error, openCell, close, reload } = useGastosDrilldown({
     filterQuery,
     view: "nombre",
   });
   const dataMap = Object.fromEntries(data.byNombre.map((n) => [n.name, n.total]));
   const nameKeys = data.nameKeys.filter((k) => (dataMap[k] ?? 0) > 0);
 
-  const lineData = MONTHS.map((month, idx) => ({
+  const lineData: EvolutionChartRow[] = MONTHS.map((month, idx) => ({
     month,
     total: data.monthlyEvolution[idx] ?? 0,
+    previous: data.monthlyEvolutionPrevious?.[idx] ?? null,
   }));
+  const showPreviousLine = data.monthlyEvolutionPrevious?.some((v) => v > 0) ?? false;
 
   const columnHeat = data.monthlyByNombre
     ? computePivotColumnHeatRanges(data.monthlyByNombre, nameKeys)
@@ -81,17 +122,24 @@ export function NombreView({ data, sectionLabel, showMonthlyTable, filterQuery }
           error={error}
           labelHeader="Concepto"
           onClose={close}
+          editable
+          onAfterSave={() => void reload()}
         />
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <TotalApuntadoCard total={data.total} ytdComparison={data.ytdComparison} />
-        <div className="rounded-2xl border border-border bg-card p-5 text-center shadow-sm">
+        <GastosMetricCard centered>
+          <p className="text-sm font-medium text-muted">Registros</p>
+          <p className="mt-2 text-3xl font-semibold tracking-tight">{data.records}</p>
+          <p className="mt-2 text-xs text-muted">movimientos</p>
+        </GastosMetricCard>
+        <GastosMetricCard centered>
           <p className="text-sm font-medium text-muted">Media mensual</p>
           <p className="mt-2 text-3xl font-semibold tracking-tight text-expense">
             {formatEur(Math.round(data.monthlyAverage))}
           </p>
-        </div>
+        </GastosMetricCard>
       </div>
 
       <SwitchableDistributionChart
@@ -108,7 +156,25 @@ export function NombreView({ data, sectionLabel, showMonthlyTable, filterQuery }
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="#64748b" />
               <YAxis tick={{ fontSize: 11 }} stroke="#64748b" tickFormatter={(v) => formatEur(v)} />
-              <Tooltip formatter={(v: number) => formatEur(v)} />
+              <Tooltip
+                content={
+                  <EvolutionTooltip
+                    currentLabel={data.currentPeriodLabel}
+                    previousLabel={data.previousPeriodLabel}
+                  />
+                }
+              />
+              {showPreviousLine && (
+                <Line
+                  type="monotone"
+                  dataKey="previous"
+                  stroke="#94a3b8"
+                  strokeWidth={1.5}
+                  strokeDasharray="5 5"
+                  dot={{ r: 2, fill: "#94a3b8", strokeWidth: 0 }}
+                  connectNulls
+                />
+              )}
               <Line type="monotone" dataKey="total" stroke="#dc2626" strokeWidth={2} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>

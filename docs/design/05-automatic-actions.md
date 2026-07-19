@@ -37,6 +37,7 @@ importaciones del worker, su estado de revisión y trazabilidad para idempotenci
 | **Concepto** | SingleLineText | No | No | Descripción / concepto bancario (del parseo) |
 | **Banco** | SingleLineText | Sí | No | Banco de origen del export |
 | **Persona** | SingleSelect | No | No | `Santi` \| `Sandra` \| `Común` — del catálogo de cuenta (YAML) |
+| **AccountDumps** | Link | No | No | Lote de importación (tabla AccountDumps); sustituye al antiguo campo Fichero |
 | **Metadatos** | JSON | No | No | Datos ricos del banco + `account_id`; ver abajo |
 
 ### Metadatos (JSON)
@@ -94,11 +95,18 @@ pending + Metadatos → cargar ImportRules → propuesta TablaDestino + Categor�
 
 ### Wizard → tabla destino
 ```
-pending + Aceptar   → INSERT destino, Estado=accepted
-pending + Editar    → INSERT destino, Estado=modified
+pending + Aceptar   → INSERT destino (con Link AutomaticAction), Estado=accepted, RegistroDestino={tabla,id}
+pending + Editar    → INSERT destino (con Link AutomaticAction), Estado=modified, RegistroDestino={tabla,id}
 pending + Ignorar   → Estado=ignored
-Deshacer            → revertir a pending (y borrar insert destino si aplica)
+Deshacer            → revertir a pending, borrar insert destino (vía RegistroDestino), limpiar enlace
 ```
+
+### Enlace 1-1 con registro creado (2026-06-25)
+- Solo al **Aceptar** / **Editar** desde el wizard (no inserción manual ni Excel).
+- **Gastos / Ingresos / Inversiones:** campo Link **`AutomaticAction`** (opcional).
+- **AutomaticActions:** JSON **`RegistroDestino`** `{ tabla: "Gastos"|"Ingresos"|"Inversiones", id: número }`.
+- **AutomaticActions** (links inversos NocoDB): **`EnlaceGastos`**, **`EnlaceIngresos`**, **`EnlaceInversiones`** (una sola rellena por fila).
+- Histórico anterior sin enlace; no se rellena retroactivamente.
 
 ---
 

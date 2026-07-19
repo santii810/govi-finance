@@ -117,6 +117,7 @@ export function DashboardIngresos() {
           rows={data.pivot.rows}
           details={data.pivot.details}
           colLabel="Origen"
+          labelHeader="Categoría"
         />
       )}
 

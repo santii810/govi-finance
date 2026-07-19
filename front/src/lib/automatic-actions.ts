@@ -13,6 +13,35 @@ import {
   type SelectOptionsMap,
 } from "./table-select-options";
 import type { NocoRecord, Persona } from "./types";
+import { isVisible } from "./persona";
+import { normalizePersona } from "./import-rules/engine";
+import { validatePendingClassification } from "./pending-classification";
+import { resolveIngresosOrigenForInsert } from "./pending-ingresos-origen";
+import { resolveIngresosNotasForInsert } from "./pending-ingresos-notas";
+import { defaultGastosConcepto } from "./pending-gastos-concepto";
+import { ensureClassifiedPendingSelectOptions } from "./ensure-classified-select-options";
+
+export interface RegistroDestinoRef {
+  tabla: TablaDestino;
+  id: number;
+}
+
+function parseRegistroDestino(value: unknown): RegistroDestinoRef | null {
+  if (!value || typeof value !== "object") return null;
+  const obj = value as { tabla?: unknown; id?: unknown };
+  const tabla = obj.tabla;
+  if (tabla !== "Gastos" && tabla !== "Ingresos" && tabla !== "Inversiones") return null;
+  const id = Number(obj.id);
+  if (!Number.isFinite(id) || id <= 0) return null;
+  return { tabla, id };
+}
+
+function withAutomaticActionLink(record: NocoRecord, actionId: string): NocoRecord {
+  return {
+    ...record,
+    AutomaticAction: { Id: Number(actionId) },
+  };
+}
 
 const selectOptionsCache = new Map<string, SelectOptionsMap>();
 
@@ -38,13 +67,30 @@ async function loadClassifiedPending(
   if (String(record.Estado) !== "pending") {
     throw new ActionError("La tarea ya no está pendiente", 409);
   }
+  if (!isVisible(normalizePersona(record.Persona), userPersona)) {
+    throw new ActionError("Tarea no encontrada", 404);
+  }
 
   const rules = await loadImportRules(client, userPersona);
   return classifyMovement(parsePendingMovement(record), rules);
 }
 
+const ENTIDAD_ALIASES: Record<string, string> = {
+  myinvestor: "Myinvestor",
+};
+
+function normalizeEntidad(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  return ENTIDAD_ALIASES[trimmed.toLowerCase()] ?? trimmed;
+}
+
 function deriveEntidad(item: ClassifiedPending): string | undefined {
-  return item.entidad?.trim() || item.banco?.trim() || undefined;
+  return normalizeEntidad(item.entidad) ?? normalizeEntidad(item.banco);
+}
+
+function gastosDestino(item: ClassifiedPending): string | undefined {
+  return item.destino?.trim() || defaultGastosConcepto(item.concepto) || undefined;
 }
 
 function buildGastosRecord(item: ClassifiedPending, options: SelectOptionsMap): NocoRecord {
@@ -52,7 +98,7 @@ function buildGastosRecord(item: ClassifiedPending, options: SelectOptionsMap): 
   return buildRecord({
     Date: item.fecha.slice(0, 10),
     Cantidad: cantidad,
-    Destino: item.concepto || undefined,
+    Destino: gastosDestino(item),
     Fuente: pickSelectValue("Fuente", item.banco, options),
     Persona: pickSelectValue("Persona", item.persona, options),
     Categoría: pickSelectValue("Categoría", item.categoria, options),
@@ -60,13 +106,14 @@ function buildGastosRecord(item: ClassifiedPending, options: SelectOptionsMap): 
 }
 
 function buildIngresosRecord(item: ClassifiedPending, options: SelectOptionsMap): NocoRecord {
-  const ingreso = Math.abs(item.importe);
+  const notas = resolveIngresosNotasForInsert(item);
   return buildRecord({
     Fecha: item.fecha.slice(0, 10),
-    Ingreso: ingreso,
-    Origen: pickSelectValue("Origen", item.banco, options),
+    Ingreso: item.importe,
+    Origen: resolveIngresosOrigenForInsert(item, options),
     Persona: pickSelectValue("Persona", item.persona, options),
     Categoría: pickSelectValue("Categoría", item.categoria, options),
+    ...(notas ? { Notas: notas } : {}),
   });
 }
 
@@ -103,7 +150,14 @@ function buildDestinoRecord(
 export interface ModifyFields {
   fecha?: string;
   importe?: number;
+  /** Gastos.Destino */
+  destino?: string;
+  /** Alias legacy de destino */
   concepto?: string;
+  /** Ingresos.Origen */
+  origen?: string;
+  /** Ingresos.Notas */
+  notas?: string | null;
   persona?: PersonaValue;
   tablaDestino?: TablaDestino;
   categoria?: string | null;
@@ -124,7 +178,14 @@ export async function modifyPending(
     ...item,
     fecha: fields.fecha ?? item.fecha,
     importe: fields.importe ?? item.importe,
-    concepto: fields.concepto ?? item.concepto,
+    destino:
+      fields.destino !== undefined
+        ? fields.destino || null
+        : fields.concepto !== undefined
+          ? fields.concepto || null
+          : item.destino,
+    origen: fields.origen !== undefined ? fields.origen || null : item.origen,
+    notas: fields.notas !== undefined ? fields.notas : item.notas,
     persona: fields.persona ?? item.persona,
     tablaDestino: fields.tablaDestino ?? item.tablaDestino,
     categoria: fields.categoria !== undefined ? fields.categoria : item.categoria,
@@ -133,13 +194,17 @@ export async function modifyPending(
     entidad: fields.entidad !== undefined ? fields.entidad : item.entidad,
   };
 
-  if (!merged.tablaDestino) {
-    throw new ActionError("Categoriza el movimiento antes de guardarlo", 422);
+  const validationError = validatePendingClassification(merged);
+  if (validationError) {
+    throw new ActionError(validationError, 422);
   }
 
-  const tableId = destinoTableId(merged.tablaDestino);
+  await ensureClassifiedPendingSelectOptions(client, merged);
+  selectOptionsCache.delete(destinoTableId(merged.tablaDestino!));
+
+  const tableId = destinoTableId(merged.tablaDestino!);
   const options = await getSelectOptions(client, tableId);
-  const record = buildDestinoRecord(merged, options);
+  const record = withAutomaticActionLink(buildDestinoRecord(merged, options), id);
 
   const created = await client.createRecord(tableId, record);
   const destRecordId = String(created.Id ?? "");
@@ -147,7 +212,13 @@ export async function modifyPending(
     throw new ActionError("No se pudo crear el registro destino", 500);
   }
 
-  await client.updateRecord(TABLES.automaticActions, id, { Estado: "modified" });
+  await client.updateRecord(TABLES.automaticActions, id, {
+    Estado: "modified",
+    RegistroDestino: {
+      tabla: merged.tablaDestino!,
+      id: Number(destRecordId),
+    },
+  });
   return { destTableId: tableId, destRecordId };
 }
 
@@ -175,13 +246,17 @@ export async function acceptPending(
   if (item.ignorar) {
     throw new ActionError("Este movimiento debe ignorarse, no registrarse", 422);
   }
-  if (!item.tablaDestino) {
-    throw new ActionError("Categoriza el movimiento antes de guardarlo", 422);
+  const validationError = validatePendingClassification(item);
+  if (validationError) {
+    throw new ActionError(validationError, 422);
   }
 
-  const tableId = destinoTableId(item.tablaDestino);
+  await ensureClassifiedPendingSelectOptions(client, item);
+  selectOptionsCache.delete(destinoTableId(item.tablaDestino!));
+
+  const tableId = destinoTableId(item.tablaDestino!);
   const options = await getSelectOptions(client, tableId);
-  const fields = buildDestinoRecord(item, options);
+  const fields = withAutomaticActionLink(buildDestinoRecord(item, options), id);
 
   const created = await client.createRecord(tableId, fields);
   const destRecordId = String(created.Id ?? "");
@@ -189,17 +264,30 @@ export async function acceptPending(
     throw new ActionError("No se pudo crear el registro destino", 500);
   }
 
-  await client.updateRecord(TABLES.automaticActions, id, { Estado: "accepted" });
+  await client.updateRecord(TABLES.automaticActions, id, {
+    Estado: "accepted",
+    RegistroDestino: {
+      tabla: item.tablaDestino!,
+      id: Number(destRecordId),
+    },
+  });
   return { destTableId: tableId, destRecordId };
 }
 
-export async function ignorePending(client: NocoDbClient, id: string): Promise<void> {
+export async function ignorePending(
+  client: NocoDbClient,
+  id: string,
+  userPersona: Persona,
+): Promise<void> {
   const record = await client.getRecord(TABLES.automaticActions, id);
   if (!record) {
     throw new ActionError("Tarea no encontrada", 404);
   }
   if (String(record.Estado) !== "pending") {
     throw new ActionError("La tarea ya no está pendiente", 409);
+  }
+  if (!isVisible(normalizePersona(record.Persona), userPersona)) {
+    throw new ActionError("Tarea no encontrada", 404);
   }
 
   await client.updateRecord(TABLES.automaticActions, id, { Estado: "ignored" });
@@ -215,20 +303,31 @@ export async function undoPending(
   if (!record) {
     throw new ActionError("Tarea no encontrada", 404);
   }
+  if (!isVisible(normalizePersona(record.Persona), userPersona)) {
+    throw new ActionError("Tarea no encontrada", 404);
+  }
 
   const estado = String(record.Estado);
-  if (estado !== "accepted" && estado !== "ignored") {
+  if (estado !== "accepted" && estado !== "modified" && estado !== "ignored") {
     throw new ActionError("No se puede deshacer esta tarea", 409);
   }
 
-  if (estado === "accepted") {
-    if (!opts?.destTableId || !opts?.destRecordId) {
+  if (estado === "accepted" || estado === "modified") {
+    const stored = parseRegistroDestino(record.RegistroDestino);
+    const destTableId =
+      opts?.destTableId ?? (stored ? destinoTableId(stored.tabla) : undefined);
+    const destRecordId =
+      opts?.destRecordId ?? (stored ? String(stored.id) : undefined);
+    if (!destTableId || !destRecordId) {
       throw new ActionError("Faltan datos del insert destino", 422);
     }
-    await client.deleteRecord(opts.destTableId, opts.destRecordId);
+    await client.deleteRecord(destTableId, destRecordId);
   }
 
-  await client.updateRecord(TABLES.automaticActions, id, { Estado: "pending" });
+  await client.updateRecord(TABLES.automaticActions, id, {
+    Estado: "pending",
+    RegistroDestino: null,
+  });
 
   const updated = await client.getRecord(TABLES.automaticActions, id);
   if (!updated) {

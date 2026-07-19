@@ -16,7 +16,7 @@ export async function GET() {
     const client = new NocoDbClient(nocodbUrl, nocodbToken);
     const [items, total] = await Promise.all([
       classifyPending(client, session.user.persona),
-      countPending(client),
+      countPending(client, session.user.persona),
     ]);
 
     return NextResponse.json({ total, items });

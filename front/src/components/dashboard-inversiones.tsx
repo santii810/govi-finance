@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { MetricCard } from "@/components/metric-card";
-import { DistributionPie } from "@/components/ingresos/distribution-pie";
-import { HorizontalBarChart } from "@/components/ingresos/horizontal-bar-chart";
+import { SwitchableDistributionChart } from "@/components/ingresos/switchable-distribution-chart";
 import { IngresosLineChart } from "@/components/ingresos/line-chart";
 import { MonthHeatmap } from "@/components/ingresos/month-heatmap";
 import { PivotHeatmap } from "@/components/ingresos/pivot-heatmap";
@@ -95,6 +94,8 @@ export function DashboardInversiones() {
           title={`Año en curso (${currentYear})`}
           value={data.metrics.currentYearTotal}
           hideComparison
+          ytdComparison={data.ytdComparison}
+          ytdPositiveIsGood
         />
         <MetricCard title="Media mensual neta" value={data.metrics.monthlyAverage} hideComparison />
       </div>
@@ -107,18 +108,21 @@ export function DashboardInversiones() {
       />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <HorizontalBarChart title="Por entidad" data={data.byEntidad} color="#2563eb" />
-        <HorizontalBarChart title="Por tipo" data={data.byTipo} color="#2563eb" />
+        <SwitchableDistributionChart
+          title="Por entidad"
+          data={data.byEntidad}
+          color="#2563eb"
+          signed
+        />
+        <SwitchableDistributionChart title="Por tipo" data={data.byTipo} color="#2563eb" signed />
       </div>
 
-      <HorizontalBarChart title="Por nombre (activo / producto)" data={data.byNombre} color="#2563eb" />
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <DistributionPie title="Distribución por entidad" data={data.byEntidad} signed />
-        <DistributionPie title="Distribución por tipo" data={data.byTipo} signed />
-      </div>
-
-      <DistributionPie title="Distribución por nombre" data={data.byNombre} signed />
+      <SwitchableDistributionChart
+        title="Por nombre (activo / producto)"
+        data={data.byNombre}
+        color="#2563eb"
+        signed
+      />
 
       {data.pivot.rows.length > 0 && (
         <PivotHeatmap
@@ -132,7 +136,14 @@ export function DashboardInversiones() {
         />
       )}
 
-      {data.heatmap.length > 0 && <MonthHeatmap rows={data.heatmap} signed />}
+      {data.heatmap.length > 0 && (
+        <MonthHeatmap
+          rows={data.heatmap}
+          details={data.heatmapDetails}
+          labelHeader="Activo"
+          signed
+        />
+      )}
     </div>
   );
 }

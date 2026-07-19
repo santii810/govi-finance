@@ -75,12 +75,14 @@ export function groupRulesByDestino(rules: ImportRule[]): RuleDestinoGroup[] {
 
 export const DEFAULT_PRIORITY: Record<ConditionKind, number> = {
   exacto: 500,
+  regex: 500,
   contiene: 100,
   importe_positivo: 0,
   importe_negativo: 0,
 };
 
 export function inferConditionKind(condition: RuleCondition): ConditionKind {
+  if (condition.concepto_regex) return "regex";
   if (condition.concepto_exacto) return "exacto";
   if (condition.concepto_contiene) return "contiene";
   if (condition.importe_negativo) return "importe_negativo";
@@ -93,6 +95,8 @@ export function buildCondition(kind: ConditionKind, texto: string): RuleConditio
       return { concepto_exacto: texto.trim() };
     case "contiene":
       return { concepto_contiene: texto.trim() };
+    case "regex":
+      return { concepto_regex: texto.trim() };
     case "importe_positivo":
       return { importe_positivo: true };
     case "importe_negativo":
@@ -100,9 +104,21 @@ export function buildCondition(kind: ConditionKind, texto: string): RuleConditio
   }
 }
 
+export function formatConceptoExactoText(exact: string | string[]): string {
+  const values = Array.isArray(exact) ? exact : [exact];
+  return values.map((value) => `«${value}»`).join(" o ");
+}
+
 export function getConditionText(condition: RuleCondition): string {
-  if (condition.concepto_exacto) return condition.concepto_exacto;
-  if (condition.concepto_contiene) return condition.concepto_contiene;
+  if (condition.concepto_regex) return condition.concepto_regex;
+  if (condition.concepto_exacto) {
+    const exact = condition.concepto_exacto;
+    return Array.isArray(exact) ? exact.join(" · ") : exact;
+  }
+  if (condition.concepto_contiene) {
+    const contains = condition.concepto_contiene;
+    return Array.isArray(contains) ? contains.join(" · ") : contains;
+  }
   return "";
 }
 
@@ -114,12 +130,17 @@ export function formatRuleSummary(rule: ImportRule): string {
   const kind = inferConditionKind(rule.condition);
   if (isIgnorarRule(rule)) {
     if (kind === "exacto") {
-      const text = rule.condition.concepto_exacto ?? "";
-      return `Si concepto = «${text}» → ignorar (transferencia)`;
+      const exact = rule.condition.concepto_exacto;
+      const text = exact ? formatConceptoExactoText(exact) : "«»";
+      return `Si concepto = ${text} → ignorar (transferencia)`;
     }
     if (kind === "contiene") {
       const text = rule.condition.concepto_contiene ?? "";
       return `Si concepto contiene «${text}» → ignorar (transferencia)`;
+    }
+    if (kind === "regex") {
+      const text = rule.condition.concepto_regex ?? "";
+      return `Si concepto ~ /${text}/ → ignorar (transferencia)`;
     }
     if (kind === "importe_positivo") return "Si importe positivo → ignorar (transferencia)";
     return "Si importe negativo → ignorar (transferencia)";
@@ -130,20 +151,33 @@ export function formatRuleSummary(rule: ImportRule): string {
   const suffix = inversionSuffix(rule);
 
   if (kind === "exacto") {
-    const text = rule.condition.concepto_exacto ?? "";
+    const exact = rule.condition.concepto_exacto;
+    const text = exact ? formatConceptoExactoText(exact) : "«»";
     if (dest === "Inversiones") {
       const parts = [rule.actions.tipo, rule.actions.nombre].filter(Boolean).join(" · ");
-      return `Si concepto = «${text}» → ${dest}${parts ? ` (${parts})` : ""}${suffix}`;
+      return `Si concepto = ${text} → ${dest}${parts ? ` (${parts})` : ""}${suffix}`;
     }
     if (dest === "Gastos" && rule.actions.categoria) {
-      return `Si concepto = «${text}» → ${dest} / ${rule.actions.categoria}${suffix}`;
+      return `Si concepto = ${text} → ${dest} / ${rule.actions.categoria}${suffix}`;
     }
-    return `Si concepto = «${text}» → ${dest}${suffix}`;
+    return `Si concepto = ${text} → ${dest}${suffix}`;
   }
 
   if (kind === "contiene") {
     const text = rule.condition.concepto_contiene ?? "";
     return `Si concepto contiene «${text}» → ${dest}${suffix}`;
+  }
+
+  if (kind === "regex") {
+    const text = rule.condition.concepto_regex ?? "";
+    if (dest === "Inversiones") {
+      const parts = [rule.actions.tipo, rule.actions.nombre].filter(Boolean).join(" · ");
+      return `Si concepto ~ /${text}/ → ${dest}${parts ? ` (${parts})` : ""}${suffix}`;
+    }
+    if (dest === "Gastos" && rule.actions.categoria) {
+      return `Si concepto ~ /${text}/ → ${dest} / ${rule.actions.categoria}${suffix}`;
+    }
+    return `Si concepto ~ /${text}/ → ${dest}${suffix}`;
   }
 
   if (kind === "importe_positivo") return `Si importe positivo → ${dest}${suffix}`;

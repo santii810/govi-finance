@@ -72,8 +72,8 @@ export function InmobiliarioBarChart({ title, data }: InmobiliarioBarChartProps)
             <YAxis type="category" dataKey="nombre" width={110} tick={{ fontSize: 11 }} stroke="#64748b" />
             <Tooltip formatter={(value: number) => formatEur(value)} />
             <Legend />
-            <Bar dataKey="Valor bruto" fill="#2563eb" radius={[0, 2, 2, 0]} />
-            <Bar dataKey="Deuda pendiente" fill="#ca8a04" radius={[0, 2, 2, 0]} />
+            <Bar dataKey="Valor bruto" fill="#16a34a" radius={[0, 2, 2, 0]} />
+            <Bar dataKey="Deuda pendiente" fill="#dc2626" radius={[0, 2, 2, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

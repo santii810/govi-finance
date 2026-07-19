@@ -2,9 +2,15 @@ import { TABLES } from "./config";
 import { parseImportRule, loadAllImportRulesForUser } from "./classifier";
 import { parseJsonField } from "./import-rules/engine";
 import type { ImportRule, ImportRuleInput, PersonaValue } from "./import-rules/types";
+import { normalizePersona } from "./import-rules/engine";
 import { NocoDbClient } from "./nocodb";
 import { isImportRuleVisible } from "./persona";
 import type { NocoRecord, Persona } from "./types";
+
+function assertAssignableRulePersona(persona: PersonaValue, userPersona: Persona): void {
+  if (persona === "Común" || persona === userPersona) return;
+  throw new RuleError("No puedes asignar reglas a la otra persona", 403);
+}
 
 function toNocoRecord(input: ImportRuleInput & { persona: PersonaValue }): NocoRecord {
   return {
@@ -66,7 +72,7 @@ export async function updateImportRule(
 
   const merged: ImportRuleInput & { persona: PersonaValue } = {
     nombre: input.nombre ?? existing.nombre,
-    persona: existing.persona,
+    persona: input.persona ?? existing.persona,
     activa: input.activa ?? existing.active,
     alcance: input.alcance ?? existing.scope,
     cuenta: input.cuenta !== undefined ? input.cuenta : existing.accountId,
@@ -74,6 +80,7 @@ export async function updateImportRule(
     condition: input.condition ?? existing.condition,
     actions: input.actions ?? existing.actions,
   };
+  assertAssignableRulePersona(merged.persona, userPersona);
 
   await client.updateRecord(TABLES.importRules, id, toNocoRecord(merged));
   const updated = await client.getRecord(TABLES.importRules, id);
@@ -117,9 +124,14 @@ export function normalizeRuleInput(
   body: NocoRecord,
   defaultPersona: Persona,
 ): ImportRuleInput & { persona: PersonaValue } {
+  const persona = body.persona
+    ? normalizePersona(body.persona, defaultPersona)
+    : defaultPersona;
+  assertAssignableRulePersona(persona, defaultPersona);
+
   return {
     nombre: String(body.nombre ?? ""),
-    persona: defaultPersona,
+    persona,
     activa: body.activa !== false,
     alcance: body.alcance === "account" ? "account" : "global",
     cuenta: body.cuenta ? String(body.cuenta) : null,

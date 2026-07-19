@@ -6,6 +6,9 @@ export const TABLES = {
   patrimonio: "mimdsus64el2tnl",
   automaticActions: "mugm6tw1ail68rq",
   importRules: "mo7uf7o396lxp59",
+  accounts: "mr0ouismkezq5un",
+  accountDumps: "mcnkpvmpdvo6h9w",
+  gastosPlantillas: "meadbamg3ffs9v3",
 } as const;
 
 export function getSessionSecret(): string {

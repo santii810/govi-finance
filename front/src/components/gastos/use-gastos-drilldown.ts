@@ -15,12 +15,10 @@ export function useGastosDrilldown({ filterQuery, view }: UseGastosDrilldownOpti
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const openCell = useCallback(
+  const fetchMoves = useCallback(
     async (rowLabel: string, colLabel: string) => {
-      setSelection({ rowLabel, colLabel });
       setLoading(true);
       setError("");
-      setMoves([]);
       try {
         const params = new URLSearchParams(filterQuery);
         params.set("view", view);
@@ -35,12 +33,27 @@ export function useGastosDrilldown({ filterQuery, view }: UseGastosDrilldownOpti
         setMoves(json.moves ?? []);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Error desconocido");
+        setMoves([]);
       } finally {
         setLoading(false);
       }
     },
     [filterQuery, view],
   );
+
+  const openCell = useCallback(
+    async (rowLabel: string, colLabel: string) => {
+      setSelection({ rowLabel, colLabel });
+      setMoves([]);
+      await fetchMoves(rowLabel, colLabel);
+    },
+    [fetchMoves],
+  );
+
+  const reload = useCallback(async () => {
+    if (!selection) return;
+    await fetchMoves(selection.rowLabel, selection.colLabel);
+  }, [selection, fetchMoves]);
 
   const close = useCallback(() => {
     setSelection(null);
@@ -49,5 +62,5 @@ export function useGastosDrilldown({ filterQuery, view }: UseGastosDrilldownOpti
     setLoading(false);
   }, []);
 
-  return { selection, moves, loading, error, openCell, close };
+  return { selection, moves, loading, error, openCell, close, reload };
 }

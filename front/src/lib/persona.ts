@@ -7,9 +7,9 @@ export function personaFilter(persona: Persona): string {
   return `(Persona,in,${persona},Común)`;
 }
 
-/** ImportRules son personales: solo las del usuario logueado (sin Común). */
+/** ImportRules: propias del usuario y reglas comunes (Persona = Común). */
 export function importRulesPersonaFilter(persona: Persona): string {
-  return `(Persona,eq,${persona})`;
+  return personaFilter(persona);
 }
 
 export function isVisible(recordPersona: unknown, userPersona: Persona): boolean {
@@ -18,7 +18,7 @@ export function isVisible(recordPersona: unknown, userPersona: Persona): boolean
 }
 
 export function isImportRuleVisible(recordPersona: unknown, userPersona: Persona): boolean {
-  return recordPersona === userPersona;
+  return isVisible(recordPersona, userPersona);
 }
 
 export function filterByPersona<T extends { persona: PersonaValue }>(
@@ -44,7 +44,16 @@ export function parseAmount(value: unknown): number {
 
 export function parseDate(value: unknown): Date | null {
   if (!value) return null;
-  const d = new Date(String(value));
+  const raw = String(value).trim();
+  const dateOnly = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (dateOnly) {
+    const year = Number(dateOnly[1]);
+    const month = Number(dateOnly[2]) - 1;
+    const day = Number(dateOnly[3]);
+    const d = new Date(Date.UTC(year, month, day, 12));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const d = new Date(raw);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 

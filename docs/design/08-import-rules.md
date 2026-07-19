@@ -75,6 +75,8 @@ Entrada: `Concepto`, `Importe`, `Persona`, `Banco` + campos de **Metadatos** (Au
 | Clave | Valores | Descripción |
 |-------|---------|-------------|
 | `tabla_destino` | `Gastos` \| `Ingresos` \| `Inversiones` | Tabla destino propuesta |
+| `origen` | string | Valor en **Ingresos.Origen** |
+| `notas` | string | Texto en **Ingresos.Notas** (p. ej. emisor del dividendo) |
 | `categoria` | string | Categoría (destino Gastos) |
 | `tipo` | string | Tipo de inversión (destino Inversiones; ej. `Fondo indexado`) |
 | `nombre` | string | Nombre del activo (destino Inversiones; ej. `SP500`) |

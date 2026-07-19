@@ -28,7 +28,10 @@ def read_excel_matrix(path: Path) -> list[list[str]]:
         workbook.close()
 
 
-def split_csv_line(line: str) -> list[str]:
+def split_csv_line(line: str, delimiter: str | None = None) -> list[str]:
+    if delimiter is None:
+        # MyInvestor (ES) usa ';'; Revolut/TR suelen usar ','.
+        delimiter = ";" if line.count(";") > line.count(",") else ","
     parts: list[str] = []
     current: list[str] = []
     in_quotes = False
@@ -36,7 +39,7 @@ def split_csv_line(line: str) -> list[str]:
         if char == '"':
             in_quotes = not in_quotes
             continue
-        if char == "," and not in_quotes:
+        if char == delimiter and not in_quotes:
             parts.append("".join(current).strip())
             current = []
             continue

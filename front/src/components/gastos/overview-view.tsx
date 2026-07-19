@@ -1,6 +1,7 @@
 "use client";
 
 import { colorMapForKeys } from "@/components/gastos/colors";
+import { GastosMetricCard } from "@/components/gastos/gastos-metric-card";
 import { RankingBarChart } from "@/components/gastos/ranking-bar-chart";
 import { TotalApuntadoCard } from "@/components/gastos/total-apuntado-card";
 import { Treemap } from "@/components/gastos/treemap";
@@ -18,7 +19,7 @@ interface OverviewViewProps {
 }
 
 export function OverviewView({ data, filterQuery }: OverviewViewProps) {
-  const { selection, moves, loading, error, openCell, close } = useGastosDrilldown({
+  const { selection, moves, loading, error, openCell, close, reload } = useGastosDrilldown({
     filterQuery,
     view: "overview",
   });
@@ -51,16 +52,24 @@ export function OverviewView({ data, filterQuery }: OverviewViewProps) {
           error={error}
           labelHeader="Concepto"
           onClose={close}
+          editable
+          onAfterSave={() => void reload()}
         />
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <TotalApuntadoCard total={data.total} ytdComparison={data.ytdComparison} />
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+        <GastosMetricCard centered>
           <p className="text-sm font-medium text-muted">Registros</p>
           <p className="mt-2 text-3xl font-semibold tracking-tight">{data.records}</p>
           <p className="mt-2 text-xs text-muted">movimientos</p>
-        </div>
+        </GastosMetricCard>
+        <GastosMetricCard centered>
+          <p className="text-sm font-medium text-muted">Media mensual</p>
+          <p className="mt-2 text-3xl font-semibold tracking-tight text-expense">
+            {formatEur(Math.round(data.monthlyAverage))}
+          </p>
+        </GastosMetricCard>
       </div>
 
       <div className="space-y-3">

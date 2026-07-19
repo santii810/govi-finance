@@ -22,18 +22,6 @@ def _as_text(value: object) -> str | None:
     return text or None
 
 
-def map_gastos_persona(origen: str | None, fuente: str | None, default_persona: str) -> str:
-    normalized = (origen or "").strip().lower()
-    if normalized == "común" or normalized == "comun":
-        return "Común"
-    fuente_text = (fuente or "").lower()
-    if "sandra" in fuente_text:
-        return "Sandra"
-    if normalized == "personal":
-        return default_persona
-    return default_persona
-
-
 def map_inversion_tipo(value: str | None) -> str | None:
     if not value:
         return None
@@ -48,6 +36,32 @@ def map_patrimonio_tipo(value: str | None) -> str | None:
     return mapped or value.strip().title()
 
 
+def map_gastos_personales_row(row: dict[str, Any], default_persona: str) -> dict[str, Any] | None:
+    from worker.gastos_comun_import.mappers import build_categoria
+
+    cantidad = _as_float(row.get("Cantidad"))
+    fecha = excel_serial_to_date(row.get("Día"))
+    categoria = build_categoria(row)
+    if cantidad is None or fecha is None or categoria is None:
+        return None
+
+    record: dict[str, Any] = {
+        "Date": fecha,
+        "Fuente": _as_text(row.get("Fuente")),
+        "Destino": _as_text(row.get("Destino")),
+        "Cantidad": cantidad,
+        "Categoría": categoria,
+        "Persona": default_persona,
+    }
+
+    if categoria == "Viaxes" or categoria.startswith("Viaxes_"):
+        ubicacion = _as_text(row.get("UbicaciónViaxe"))
+        if ubicacion:
+            record["Ubicación"] = ubicacion
+
+    return record
+
+
 def map_gastos_row(row: dict[str, Any], default_persona: str) -> dict[str, Any] | None:
     cantidad = _as_float(row.get("Cantidad"))
     fecha = excel_serial_to_date(row.get("Día"))
@@ -59,7 +73,7 @@ def map_gastos_row(row: dict[str, Any], default_persona: str) -> dict[str, Any] 
         "Destino": _as_text(row.get("Destino")),
         "Cantidad": cantidad,
         "Categoría": _as_text(row.get("Categoría")),
-        "Persona": map_gastos_persona(_as_text(row.get("Origen")), _as_text(row.get("Fuente")), default_persona),
+        "Persona": default_persona,
     }
 
 
@@ -110,6 +124,7 @@ def map_patrimonio_row(row: dict[str, Any], default_persona: str) -> dict[str, A
 
 MAPPERS = {
     "gastos": map_gastos_row,
+    "gastos_personales": map_gastos_personales_row,
     "ingresos": map_ingresos_row,
     "inversiones": map_inversion_row,
     "patrimonio": map_patrimonio_row,
@@ -117,6 +132,7 @@ MAPPERS = {
 
 SELECT_FIELDS = {
     "gastos": ("Fuente", "Categoría", "Persona"),
+    "gastos_personales": ("Fuente", "Categoría", "Persona"),
     "ingresos": ("Origen", "Categoría", "Persona"),
     "inversiones": ("Tipo", "Persona"),
     "patrimonio": ("Tipo", "Persona"),

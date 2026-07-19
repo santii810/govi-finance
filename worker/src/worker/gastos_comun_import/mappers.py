@@ -28,6 +28,10 @@ def build_categoria(row: dict[str, Any]) -> str | None:
         cat1 = _as_text(row.get("CategoríaViaxe"))
         ubicacion = _as_text(row.get("UbicaciónViaxe"))
 
+        # Hotel: destino del alojamiento va en Ubicación, no en Categoría.
+        if _same_label(cat2, "Hotel"):
+            return "Viaxes_Hotel"
+
         if _same_label(cat1, ubicacion) or _same_label(cat1, cat2):
             cat1 = None
 

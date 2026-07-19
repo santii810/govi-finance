@@ -44,6 +44,19 @@ class NocoDbClient:
     async def create_record(self, table_id: str, fields: dict[str, Any]) -> dict[str, Any]:
         return await self._request("POST", f"/api/v2/tables/{table_id}/records", json=fields)
 
+    async def update_record(self, table_id: str, record_id: int | str, fields: dict[str, Any]) -> None:
+        await self._request(
+            "PATCH",
+            f"/api/v2/tables/{table_id}/records",
+            json={"Id": record_id, **fields},
+        )
+
+    async def delete_records(self, table_id: str, record_ids: list[int | str]) -> None:
+        if not record_ids:
+            return
+        payload = [{"Id": record_id} for record_id in record_ids]
+        await self._request("DELETE", f"/api/v2/tables/{table_id}/records", json=payload)
+
     async def create_records(self, table_id: str, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not records:
             return []

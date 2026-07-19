@@ -20,6 +20,9 @@ type ActionBody = {
   fecha?: string;
   importe?: number;
   concepto?: string;
+  destino?: string;
+  origen?: string;
+  notas?: string | null;
   persona?: string;
   tablaDestino?: string;
   categoria?: string | null;
@@ -49,7 +52,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     if (action === "ignore") {
-      await ignorePending(client, id);
+      await ignorePending(client, id, session.user.persona);
       return NextResponse.json({ ok: true });
     }
 
@@ -58,6 +61,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         fecha: body.fecha,
         importe: body.importe,
         concepto: body.concepto,
+        destino: body.destino,
+        origen: body.origen,
+        notas: body.notas,
         persona: body.persona as "Santi" | "Sandra" | "Común" | undefined,
         tablaDestino: body.tablaDestino as "Gastos" | "Ingresos" | "Inversiones" | undefined,
         categoria: body.categoria,

@@ -2,3 +2,4 @@
 "2025-06-03T10:00:00Z","2025-06-03","DEFAULT","CASH","CARD_TRANSACTION","","WWW.AMAZON*","","","","-180.89","","","EUR","","","","TR Card Transaction","amazon-tx-001","","","","5942"
 "2025-06-01T08:00:00Z","2025-06-01","DEFAULT","CASH","INTEREST_PAYMENT","","","","","","0.09","","","EUR","","","","Interest payment Booking","interest-tx-001","","","",""
 "2025-06-02T08:00:00Z","2025-06-02","DEFAULT","TRADING","BUY","STOCK","Taiwan Semi","US8740391003","1","7","-7.00","","","EUR","","","","Savings plan execution","buy-tx-001","","","",""
+"2026-02-01T02:31:38Z","2026-02-01","DEFAULT","CASH","INTEREST_PAYMENT","","","","","","13.98","","-2.66","EUR","","","","Interest payment for payout collection 019c16f9-46b8-7785-9880-607a7dd6e67d","interest-payout-001","","","",""

@@ -41,6 +41,20 @@ def test_build_categoria_viaxes_ignora_ubicacion_como_subcategoria():
     )
 
 
+def test_build_categoria_viaxes_hotel_sin_ciudad_en_categoria():
+    assert (
+        build_categoria(
+            {
+                "Categoría": "Viaxes",
+                "Categoría2Viaxe": "Hotel",
+                "CategoríaViaxe": "Atenas",
+                "UbicaciónViaxe": "Turquía",
+            }
+        )
+        == "Viaxes_Hotel"
+    )
+
+
 def test_build_categoria_viaxes_misma_subcategoria():
     assert (
         build_categoria(

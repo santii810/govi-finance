@@ -102,11 +102,16 @@ def _rule_matches(rule: NocoDbRule, movement: RawMovement, account_id: str) -> b
     if "importe_negativo" in condition and (movement.importe < 0) != bool(condition["importe_negativo"]):
         return False
     contains = condition.get("concepto_contiene")
-    if contains and contains.lower() not in movement.concepto.lower():
-        return False
+    if contains is not None:
+        values = contains if isinstance(contains, list) else [contains]
+        if not any(str(value).lower() in movement.concepto.lower() for value in values):
+            return False
     exact = condition.get("concepto_exacto")
-    if exact and movement.concepto.strip().lower() != str(exact).strip().lower():
-        return False
+    if exact is not None:
+        values = exact if isinstance(exact, list) else [exact]
+        normalized = movement.concepto.strip().lower()
+        if not any(normalized == str(value).strip().lower() for value in values):
+            return False
     regex = condition.get("concepto_regex")
     if regex and not re.search(str(regex), movement.concepto, re.IGNORECASE):
         return False

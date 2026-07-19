@@ -1,5 +1,6 @@
 import type { NocoDbClient } from "./nocodb";
 import { TABLES } from "./config";
+import { fetchIncomeRatios } from "./income-ratios";
 import {
   aggregateByMonth,
   attributedAmount,
@@ -79,7 +80,7 @@ export async function fetchResumen(
   const where = personaFilter(persona);
   const dateFrom = monthStartIso(timezone, -13);
 
-  const [gastosRaw, ingresosRaw, inversionesRaw] = await Promise.all([
+  const [gastosRaw, ingresosRaw, inversionesRaw, ratios] = await Promise.all([
     client.listRecords(TABLES.gastos, {
       where,
       dateFrom: { field: "Date", iso: dateFrom },
@@ -95,6 +96,7 @@ export async function fetchResumen(
       dateFrom: { field: "Fecha", iso: dateFrom },
       fields: [...RESUMEN_INVERSIONES_FIELDS],
     }),
+    fetchIncomeRatios(client, persona, timezone),
   ]);
 
   const gastos = mapGastos(gastosRaw);
@@ -107,13 +109,18 @@ export async function fetchResumen(
   const metrics = computeMetrics(gastosByMonth, ingresosByMonth, timezone);
 
   const monthKeys = last12MonthKeys(timezone);
-  const chart = monthKeys.map((key) => ({
-    month: key,
-    label: monthLabel(key),
-    ingresos: ingresosByMonth[key] ?? 0,
-    gastos: gastosByMonth[key] ?? 0,
-    inversion: inversionByMonth[key] ?? 0,
-  }));
+  const chart = monthKeys.map((key) => {
+    const ingresos = ingresosByMonth[key] ?? 0;
+    const gastos = gastosByMonth[key] ?? 0;
+    return {
+      month: key,
+      label: monthLabel(key),
+      ingresos,
+      gastos,
+      inversion: inversionByMonth[key] ?? 0,
+      ahorro: ingresos - gastos - (inversionByMonth[key] ?? 0),
+    };
+  });
 
-  return { metrics, chart };
+  return { metrics, chart, ratios };
 }

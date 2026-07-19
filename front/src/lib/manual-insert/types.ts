@@ -11,6 +11,7 @@ export interface ManualInsertOptions {
   entidadInversiones: string[];
   tipoPatrimonio: string[];
   entidadPatrimonio: string[];
+  propiedadesPatrimonio: string[];
   persona: PersonaValue[];
 }
 
@@ -43,9 +44,16 @@ export interface InversionesRowInput {
 export interface PatrimonioRowInput {
   entidad: string;
   nombre: string;
+  /** Valor total del activo/deuda antes de aplicar titularidad (€, siempre positivo en UI). */
   valor: string;
   tipo: string;
   persona: PersonaValue | "";
+  /** Unidades de cripto (solo BTC): si se rellena, el Valor en € se calcula al guardar. */
+  unidades?: string;
+  /** Etiqueta de propiedad para agrupar activo + hipoteca en el desglose inmobiliario. */
+  propiedad?: string;
+  /** Porcentaje de titularidad (1–100). Vacío = 100 %. */
+  porcentaje?: string;
 }
 
 export interface PatrimonioSnapshotInput {

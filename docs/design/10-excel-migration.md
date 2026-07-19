@@ -8,20 +8,20 @@ Mientras la app web evoluciona, el Excel sigue siendo el libro de registro del u
 
 | Entidad      | Hoja Excel     | Tabla NocoDB | Notas |
 |--------------|----------------|--------------|-------|
-| Gastos       | `GastosExport` | Gastos       | Incluye comunes + personales; columna `Origen` → `Persona` |
+| Gastos personales | `GastosPersonales` | Gastos | Todos `Persona = Santi`; categorías compuestas (ReformaPiso, Viaxes) |
+| Gastos (legacy)   | `GastosExport`     | Gastos | Obsoleto; usar `GastosPersonales` + `GastosComún.xlsx` |
 | Ingresos     | `Ingresos`     | Ingresos     | Sin columna Persona en Excel → default `Santi` |
 | Inversión    | `Inversión`    | Inversiones  | `Elemento` → `Nombre`, `Aportado` → `Importe` |
 | Patrimonio   | `Patrimonio`   | Patrimonio   | `Nota` → `Nombre`, `cantidad` → `Valor` |
 
-Hojas **no importadas** (por ahora): `GastosTotales`, `GastosPersonales`, `Templates`, `Renta`, `Deudas`.
+Hojas **no importadas** (por ahora): `GastosTotales`, `GastosExport`, `Templates`, `Renta`, `Deudas`.
 
 ## Mapeos de Persona (Gastos)
 
-| Excel `Origen` | Regla |
-|----------------|-------|
-| `Común`        | `Persona = Común` |
-| `Personal` + fuente con «Sandra» | `Persona = Sandra` |
-| `Personal` (resto) | `Persona` = flag `--persona` (default `Santi`) |
+| Fuente Excel | Regla |
+|--------------|-------|
+| `Finanzas.xlsx` → `GastosPersonales` | Todas las filas → `Persona = Santi` (flag `--persona`). La columna **Fuente** indica quién pagó, no la persona del gasto. |
+| `GastosComún.xlsx` → `Gastos Común` | Todas las filas → `Persona = Común` (`import-gastos-comun`). |
 
 Ingresos, Inversiones y Patrimonio usan `--persona` para todas las filas (el Excel no trae Persona).
 

@@ -21,22 +21,17 @@ export function AppShell({ user, children }: AppShellProps) {
   const router = useRouter();
   const pathname = usePathname();
   const isInsertPage = pathname === "/app/insertar";
+  const isBackupsPage = pathname === "/app/backups";
+  const isImportacionesPage = pathname === "/app/importaciones";
+  const isLogPage = pathname === "/app/log";
   const isHome = pathname === "/app";
 
   const [activeTab, setActiveTab] = useState<Tab>("resumen");
   const [visitedTabs, setVisitedTabs] = useState<Set<Tab>>(() => new Set(["resumen"]));
   const [menuOpen, setMenuOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
-  const [backupState, setBackupState] = useState<"idle" | "running" | "ready" | "error">("idle");
-  const [backupMessage, setBackupMessage] = useState("");
-  const [backupPercent, setBackupPercent] = useState(0);
-  const [backupArchive, setBackupArchive] = useState<string | null>(null);
-  const [uploadState, setUploadState] = useState<"idle" | "running" | "ok" | "error">("idle");
-  const [uploadMessage, setUploadMessage] = useState("");
   const [dashboardRefresh, setDashboardRefresh] = useState(0);
   const prevPathRef = useRef(pathname);
-
-  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
   const fetchPendingCount = useCallback(async () => {
     try {
@@ -54,7 +49,13 @@ export function AppShell({ user, children }: AppShellProps) {
   }, [fetchPendingCount]);
 
   useEffect(() => {
-    if (prevPathRef.current === "/app/insertar" && pathname === "/app") {
+    if (
+      (prevPathRef.current === "/app/insertar" ||
+        prevPathRef.current === "/app/backups" ||
+        prevPathRef.current === "/app/importaciones" ||
+        prevPathRef.current === "/app/log") &&
+      pathname === "/app"
+    ) {
       setDashboardRefresh((n) => n + 1);
     }
     prevPathRef.current = pathname;
@@ -81,140 +82,6 @@ export function AppShell({ user, children }: AppShellProps) {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
     router.refresh();
-  }
-
-  async function pollBackupStatus(
-    onUpdate: (status: {
-      running?: boolean;
-      percent?: number;
-      message?: string;
-      archive?: string;
-      error?: string;
-    }) => void,
-  ): Promise<"done" | "error" | "timeout"> {
-    for (let attempt = 0; attempt < 600; attempt += 1) {
-      await sleep(400);
-      const statusRes = await fetch("/api/backup/status", { cache: "no-store" });
-      const status = (await statusRes.json()) as {
-        running?: boolean;
-        percent?: number;
-        message?: string;
-        archive?: string;
-        error?: string;
-      };
-
-      if (!statusRes.ok) {
-        onUpdate({ error: status.error ?? "Error al consultar el progreso" });
-        return "error";
-      }
-
-      onUpdate(status);
-
-      if (!status.running) {
-        return status.error ? "error" : "done";
-      }
-    }
-    return "timeout";
-  }
-
-  async function handleBackup() {
-    setBackupState("running");
-    setBackupPercent(0);
-    setBackupMessage("Iniciando…");
-    setBackupArchive(null);
-    setUploadState("idle");
-    setUploadMessage("");
-
-    try {
-      const startRes = await fetch("/api/backup/run", { method: "POST" });
-      const startJson = (await startRes.json()) as { error?: string };
-      if (!startRes.ok) {
-        setBackupState("error");
-        setBackupMessage(startJson.error ?? "No se pudo iniciar el backup");
-        return;
-      }
-
-      const result = await pollBackupStatus((status) => {
-        setBackupPercent(status.percent ?? 0);
-        setBackupMessage(status.message ?? "Procesando…");
-      });
-
-      if (result === "error") {
-        setBackupState("error");
-        const statusRes = await fetch("/api/backup/status", { cache: "no-store" });
-        const status = (await statusRes.json()) as { error?: string; message?: string };
-        setBackupMessage(status.error ?? status.message ?? "Error en el backup");
-        return;
-      }
-
-      if (result === "timeout") {
-        setBackupState("error");
-        setBackupMessage("El backup tardó demasiado");
-        return;
-      }
-
-      const statusRes = await fetch("/api/backup/status", { cache: "no-store" });
-      const status = (await statusRes.json()) as { archive?: string };
-      setBackupState("ready");
-      setBackupPercent(100);
-      setBackupMessage("Backup listo");
-      setBackupArchive(status.archive ?? null);
-    } catch {
-      setBackupState("error");
-      setBackupMessage("Error de conexión con el servicio de backup");
-    }
-  }
-
-  function handleDownload() {
-    if (!backupArchive) return;
-    window.location.assign(
-      `/api/backup/download?archive=${encodeURIComponent(backupArchive)}`,
-    );
-  }
-
-  async function handleUploadToDrive() {
-    if (!backupArchive) return;
-
-    setUploadState("running");
-    setUploadMessage("Iniciando subida…");
-
-    try {
-      const startRes = await fetch("/api/backup/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ archive: backupArchive }),
-      });
-      const startJson = (await startRes.json()) as { error?: string };
-      if (!startRes.ok) {
-        setUploadState("error");
-        setUploadMessage(startJson.error ?? "No se pudo iniciar la subida");
-        return;
-      }
-
-      const result = await pollBackupStatus((status) => {
-        setUploadMessage(status.message ?? "Subiendo…");
-      });
-
-      if (result === "error") {
-        setUploadState("error");
-        const statusRes = await fetch("/api/backup/status", { cache: "no-store" });
-        const status = (await statusRes.json()) as { error?: string; message?: string };
-        setUploadMessage(status.error ?? status.message ?? "Error al subir");
-        return;
-      }
-
-      if (result === "timeout") {
-        setUploadState("error");
-        setUploadMessage("La subida tardó demasiado");
-        return;
-      }
-
-      setUploadState("ok");
-      setUploadMessage("Subido a Google Drive");
-    } catch {
-      setUploadState("error");
-      setUploadMessage("Error de conexión con el servicio de backup");
-    }
   }
 
   const tabs: { id: Tab; label: string; disabled?: boolean }[] = [
@@ -266,77 +133,44 @@ export function AppShell({ user, children }: AppShellProps) {
               <button
                 type="button"
                 onClick={() => setMenuOpen((v) => !v)}
-                className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium"
+                className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
+                  isImportacionesPage || isLogPage || isBackupsPage
+                    ? "border-accent bg-accent/10"
+                    : "border-border"
+                }`}
               >
                 {user.username} ▾
               </button>
               {menuOpen && (
-                <div className="absolute right-0 mt-1 w-56 rounded-lg border border-border bg-card py-1 shadow-lg">
-                  <div className="border-b border-border px-4 py-2">
-                    <p className="text-xs font-medium text-muted">Backup</p>
-                    <p className="mt-1 text-xs text-muted">
-                      Exporta NocoDB. Al terminar puedes descargarlo o subirlo a Drive.
-                    </p>
-                    <button
-                      type="button"
-                      disabled={backupState === "running" || uploadState === "running"}
-                      onClick={handleBackup}
-                      className="mt-2 w-full rounded-md border border-border px-3 py-1.5 text-left text-sm hover:bg-background disabled:opacity-60"
-                    >
-                      {backupState === "running" ? "Backup en curso…" : "Lanzar backup"}
-                    </button>
-                    {backupState === "running" && (
-                      <div className="mt-2">
-                        <div className="mb-1 flex items-center justify-between text-[10px] text-muted">
-                          <span>{backupMessage}</span>
-                          <span>{backupPercent}%</span>
-                        </div>
-                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-background">
-                          <div
-                            className="h-full rounded-full bg-accent transition-all duration-300"
-                            style={{ width: `${backupPercent}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                    {backupState === "ready" && backupArchive && (
-                      <div className="mt-2 flex gap-2">
-                        <button
-                          type="button"
-                          onClick={handleDownload}
-                          className="flex-1 rounded-md border border-border px-2 py-1.5 text-xs hover:bg-background"
-                        >
-                          Descargar
-                        </button>
-                        <button
-                          type="button"
-                          disabled={uploadState === "running"}
-                          onClick={handleUploadToDrive}
-                          className="flex-1 rounded-md border border-border px-2 py-1.5 text-xs hover:bg-background disabled:opacity-60"
-                        >
-                          {uploadState === "running" ? "Subiendo…" : "Subir a Drive"}
-                        </button>
-                      </div>
-                    )}
-                    {backupMessage && backupState !== "running" && (
-                      <p
-                        className={`mt-2 text-xs ${
-                          backupState === "error" ? "text-red-600" : "text-muted"
-                        }`}
-                      >
-                        {backupMessage}
-                      </p>
-                    )}
-                    {uploadMessage && (
-                      <p
-                        className={`mt-1 text-xs ${
-                          uploadState === "error" ? "text-red-600" : "text-muted"
-                        }`}
-                      >
-                        {uploadMessage}
-                      </p>
-                    )}
-                  </div>
+                <div className="absolute right-0 mt-1 w-44 rounded-lg border border-border bg-card py-1 shadow-lg">
+                  <Link
+                    href="/app/importaciones"
+                    onClick={() => setMenuOpen(false)}
+                    className={`block px-4 py-2 text-sm hover:bg-background ${
+                      isImportacionesPage ? "font-medium text-accent" : ""
+                    }`}
+                  >
+                    Importaciones
+                  </Link>
+                  <Link
+                    href="/app/log"
+                    onClick={() => setMenuOpen(false)}
+                    className={`block px-4 py-2 text-sm hover:bg-background ${
+                      isLogPage ? "font-medium text-accent" : ""
+                    }`}
+                  >
+                    Log
+                  </Link>
+                  <Link
+                    href="/app/backups"
+                    onClick={() => setMenuOpen(false)}
+                    className={`block px-4 py-2 text-sm hover:bg-background ${
+                      isBackupsPage ? "font-medium text-accent" : ""
+                    }`}
+                  >
+                    Backups
+                  </Link>
+                  <div className="my-1 border-t border-border" />
                   <button
                     type="button"
                     onClick={handleLogout}
@@ -358,7 +192,12 @@ export function AppShell({ user, children }: AppShellProps) {
               disabled={tab.disabled}
               onClick={() => !tab.disabled && goHome(tab.id)}
               className={`relative rounded-lg px-4 py-2 text-sm font-medium transition ${
-                !isInsertPage && isHome && activeTab === tab.id
+                !isInsertPage &&
+                !isBackupsPage &&
+                !isImportacionesPage &&
+                !isLogPage &&
+                isHome &&
+                activeTab === tab.id
                   ? "bg-accent text-white"
                   : tab.disabled
                     ? "cursor-not-allowed text-muted opacity-50"
@@ -380,7 +219,7 @@ export function AppShell({ user, children }: AppShellProps) {
       </header>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
-        {isInsertPage ? (
+        {isInsertPage || isBackupsPage || isImportacionesPage || isLogPage ? (
           children
         ) : (
           <>
@@ -411,7 +250,10 @@ export function AppShell({ user, children }: AppShellProps) {
             )}
             {visitedTabs.has("tareas") && (
               <div className={activeTab === "tareas" ? undefined : "hidden"}>
-                <PendingTasksPanel onCountChange={setPendingCount} />
+                <PendingTasksPanel
+                  onCountChange={setPendingCount}
+                  onDataChanged={() => setDashboardRefresh((n) => n + 1)}
+                />
               </div>
             )}
           </>

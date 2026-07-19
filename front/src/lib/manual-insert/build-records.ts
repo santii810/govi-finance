@@ -63,9 +63,18 @@ export function buildInversionesRecord(
     Importe: parseNumber(row.importe),
     Nombre: row.nombre.trim(),
     Tipo: pickSelectValue("Tipo", row.tipo, options),
-    Entidad: pickSelectValue("Entidad", row.entidad, options),
+    Entidad:
+      pickSelectValue("Entidad", row.entidad, options) ??
+      (row.entidad.trim() || undefined),
     Persona: pickSelectValue("Persona", row.persona, options),
   });
+}
+
+export interface PatrimonioComputed {
+  /** Valor en € ya calculado (p. ej. unidades BTC × cotización). */
+  valor?: number;
+  /** Contenido para la columna JSON `Detalle`. */
+  detalle?: Record<string, unknown>;
 }
 
 export function buildPatrimonioRecord(
@@ -73,11 +82,13 @@ export function buildPatrimonioRecord(
   row: PatrimonioRowInput,
   defaultPersona: PersonaValue | "",
   options: SelectOptionsMap,
+  computed?: PatrimonioComputed,
 ): NocoRecord {
   const persona = (row.persona || defaultPersona) as PersonaValue;
-  return buildRecord({
+  const valor = computed?.valor ?? parseNumber(row.valor);
+  const record = buildRecord({
     Fecha: fecha,
-    Valor: parseNumber(row.valor),
+    Valor: valor,
     Nombre: row.nombre.trim(),
     Tipo: pickSelectValue("Tipo", row.tipo, options),
     Entidad:
@@ -85,6 +96,10 @@ export function buildPatrimonioRecord(
       (row.entidad.trim() || undefined),
     Persona: pickSelectValue("Persona", persona, options),
   });
+  if (computed?.detalle && Object.keys(computed.detalle).length > 0) {
+    record.Detalle = JSON.stringify(computed.detalle);
+  }
+  return record;
 }
 
 export function buildRecordsFromRows(

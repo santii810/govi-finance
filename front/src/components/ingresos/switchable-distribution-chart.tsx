@@ -32,6 +32,8 @@ interface SwitchableDistributionChartProps {
   data: NamedAmount[];
   color?: string;
   signed?: boolean;
+  /** En vista barras incluye valores negativos (p. ej. Hipoteca en patrimonio). Donut/treemap siguen solo positivos. */
+  barSigned?: boolean;
   defaultView?: ChartView;
 }
 
@@ -98,12 +100,14 @@ function BarView({
   items,
   color,
   colorMap,
+  signed = false,
 }: {
   items: NamedAmount[];
   color: string;
   colorMap: Record<string, string>;
+  signed?: boolean;
 }) {
-  const chartData = items.filter((d) => d.total > 0);
+  const chartData = items.filter((d) => (signed ? d.total !== 0 : d.total > 0));
 
   if (chartData.length === 0) {
     return (
@@ -139,7 +143,14 @@ function BarView({
         <Tooltip formatter={(value: number) => formatEur(value)} />
         <Bar dataKey="total" fill={color} radius={[0, 4, 4, 0]} barSize={20}>
           {chartData.map((entry) => (
-            <Cell key={entry.name} fill={colorMap[entry.name] ?? color} />
+            <Cell
+              key={entry.name}
+              fill={
+                signed && entry.total < 0
+                  ? "#ca8a04"
+                  : (colorMap[entry.name] ?? color)
+              }
+            />
           ))}
         </Bar>
       </BarChart>
@@ -203,6 +214,7 @@ export function SwitchableDistributionChart({
   data,
   color = "#16a34a",
   signed = false,
+  barSigned = false,
   defaultView = "treemap",
 }: SwitchableDistributionChartProps) {
   const [view, setView] = useState<ChartView>(defaultView);
@@ -213,7 +225,10 @@ export function SwitchableDistributionChart({
   );
   const colorMap = useMemo(() => colorMapForKeys(keys), [keys]);
   const dataMap = useMemo(
-    () => Object.fromEntries(data.map((d) => [d.name, d.total])),
+    () =>
+      Object.fromEntries(
+        data.filter((d) => d.total > 0).map((d) => [d.name, d.total]),
+      ),
     [data],
   );
 
@@ -250,7 +265,9 @@ export function SwitchableDistributionChart({
       </div>
 
       <div className="h-64 w-full">
-        {view === "bar" && <BarView items={data} color={color} colorMap={colorMap} />}
+        {view === "bar" && (
+          <BarView items={data} color={color} colorMap={colorMap} signed={barSigned || signed} />
+        )}
         {view === "donut" && <DonutView items={data} signed={signed} colorMap={colorMap} />}
         {view === "treemap" && (
           <Treemap data={dataMap} colorMap={colorMap} bare className="h-full w-full" />

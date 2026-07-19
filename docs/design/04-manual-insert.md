@@ -21,10 +21,17 @@ Botón **+ Insertar** en la barra superior (siempre visible, junto a Tareas pend
 ```
 
 ## Tablas incluidas
-- **Gastos** e **Ingresos** desde el inicio.
+- **Gastos**, **Ingresos**, **Inversiones** y **Patrimonio**.
 - **Tablas futuras**: aparecen automáticamente en el desplegable cuando se creen (mismo mecanismo).
 
 > Los campos de cada formulario dependen del esquema de la tabla elegida (incl. **Persona** en todas).
+
+### Patrimonio (snapshot)
+- Un guardado = un **snapshot**: todas las filas comparten **Fecha**. Botón **«Usar último snapshot»** precarga las filas del último.
+- **Hipotecas:** **Tipo = Hipoteca**, importe en positivo en el formulario (se guarda negativo en BD).
+- Columna **Detalle** por fila (JSON, ver `data-decisions.md` 2026-07-05):
+  - **Crypto** → campo **Unidades** (BTC). Si se rellena, el **Valor €** se calcula al guardar con la cotización **BTC/EUR spot** (CoinGecko). «Usar último snapshot» arrastra las unidades y recalcula el precio.
+  - **Inmobiliario / Hipoteca** → **Propiedad** (agrupa activo + deuda) y **% titularidad** (vacío = 100 %). **Valor total** en la columna Valor; en BD se guarda la cuota (`valor_total × % / 100`; negativo si Hipoteca). `Detalle = { valor_total, porcentaje, propiedad? }`.
 
 ## Diferencia con el wizard
 | Flujo            | Origen              | Destino                    |
@@ -32,9 +39,8 @@ Botón **+ Insertar** en la barra superior (siempre visible, junto a Tareas pend
 | Wizard tareas    | AutomaticActions    | Tabla tras aceptar/modificar |
 | + Insertar       | Usuario, a mano     | Tabla elegida, directo     |
 
-## Fuera de alcance
-- Implementación.
-- Validaciones campo a campo (se derivan del esquema NocoDB cuando exista).
+## Estado
+- Implementado: Gastos, Ingresos, Inversiones, Patrimonio (con Detalle).
 
 ## Referencias
 - Shell: `01-homepage.md`

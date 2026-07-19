@@ -14,6 +14,8 @@ Ver `.env.example`. Obligatorias:
 Recomendado en producción:
 
 - `TELEGRAM_ALLOWED_USER_IDS` — IDs permitidos (coma separada)
+- `TELEGRAM_OWNER_USER_ID` — tu ID; recibes un aviso si otro usuario envía un fichero
+- `TELEGRAM_SANDRA_USER_ID` — ID de Sandra; el bot asigna sus exports a sus cuentas (nunca a las tuyas)
 
 ### Docker (recomendado)
 
@@ -21,7 +23,8 @@ Añade a `infra/.env`:
 
 ```env
 TELEGRAM_BOT_TOKEN=...
-TELEGRAM_ALLOWED_USER_IDS=123456789
+TELEGRAM_ALLOWED_USER_IDS=123456789,987654321
+TELEGRAM_OWNER_USER_ID=123456789
 ```
 
 Levanta el stack:

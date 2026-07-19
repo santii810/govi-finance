@@ -140,7 +140,8 @@ def _from_row(row: dict[str, str]) -> RawMovement | None:
 
 
 def _pick_fecha(row: dict[str, str]) -> date:
-    for key in ("fecha_fin", "fecha_inicio"):
+    # Fecha de inicio = operación real; fecha_fin suele ser 1–3 días después (liquidación).
+    for key in ("fecha_inicio", "fecha_fin"):
         value = row.get(key, "").strip()
         if value:
             return parse_date_flexible(value)

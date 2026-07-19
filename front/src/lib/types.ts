@@ -22,11 +22,14 @@ export interface MonthlyBar {
   ingresos: number;
   gastos: number;
   inversion: number;
+  /** Ahorro del mes: ingresos − gastos − inversión (distinto del Balance de las tarjetas). */
+  ahorro: number;
 }
 
 export interface ResumenData {
   metrics: ResumenMetrics;
   chart: MonthlyBar[];
+  ratios: IngresosRatios;
 }
 
 export type { PeriodFilterMode } from "@/lib/period-filter";
@@ -66,6 +69,29 @@ export interface IngresosPivot {
   details: Record<string, import("@/lib/pivot-drilldown").PivotDrilldownMove[]>;
 }
 
+export interface IncomeRatioPoint {
+  key: string;
+  label: string;
+  numerator: number;
+  denominator: number;
+  pct: number | null;
+  gastos?: number;
+  inversion?: number;
+}
+
+export interface IncomeRatioSeries {
+  monthly: IncomeRatioPoint[];
+  monthlyTotal: IncomeRatioPoint;
+  yearly: IncomeRatioPoint[];
+  yearlyTotal: IncomeRatioPoint;
+}
+
+export interface IngresosRatios {
+  gastosSobreIngresos: IncomeRatioSeries;
+  inversionSobreIngresos: IncomeRatioSeries;
+  ahorroSobreIngresos: IncomeRatioSeries;
+}
+
 export interface IngresosData {
   metrics: IngresosMetrics;
   availableYears: string[];
@@ -88,6 +114,7 @@ export interface InversionesPivot {
 
 export interface InversionesData {
   metrics: IngresosMetrics;
+  ytdComparison: GastosYtdComparison | null;
   availableYears: string[];
   yearlyLine: IngresosYearPoint[];
   byEntidad: NamedAmount[];
@@ -95,6 +122,7 @@ export interface InversionesData {
   byNombre: NamedAmount[];
   pivot: InversionesPivot;
   heatmap: IngresosHeatmapRow[];
+  heatmapDetails: Record<string, import("@/lib/pivot-drilldown").PivotDrilldownMove[]>;
   filter: { mode: InversionesFilterMode; from: string; to: string };
 }
 
@@ -133,6 +161,7 @@ export interface PatrimonioData {
   metrics: PatrimonioMetrics;
   byTipo: NamedAmount[];
   rentaVariableByNombre: NamedAmount[];
+  accionesByEmpresa: NamedAmount[];
   inmobiliario: InmobiliarioRow[];
   evolutionLine: PatrimonioSnapshotPoint[];
   evolutionByTipo: PatrimonioTipoSnapshotRow[];
@@ -147,7 +176,8 @@ export type GastosSubTab =
   | "supermercado"
   | "piso"
   | "viajes"
-  | "restauracion";
+  | "restauracion"
+  | "transporte";
 
 export type GastosFilterMode = import("@/lib/period-filter").PeriodFilterMode;
 
@@ -171,6 +201,7 @@ export interface GastosMove {
 export interface GastosOverviewData {
   total: number;
   records: number;
+  monthlyAverage: number;
   ytdComparison: GastosYtdComparison | null;
   byCategoria: NamedAmount[];
   categoriaKeys: string[];
@@ -179,11 +210,15 @@ export interface GastosOverviewData {
 
 export interface GastosNombreData {
   total: number;
+  records: number;
   monthlyAverage: number;
   ytdComparison: GastosYtdComparison | null;
   byNombre: NamedAmount[];
   nameKeys: string[];
   monthlyEvolution: number[];
+  monthlyEvolutionPrevious: number[] | null;
+  currentPeriodLabel: string;
+  previousPeriodLabel: string | null;
   monthlyByNombre?: GastosMonthlyRow[];
   recentMoves: GastosMove[];
 }
@@ -258,8 +293,13 @@ export interface GastosRankingMeal {
 
 export interface GastosRestauracionData {
   total: number;
+  records: number;
   monthlyAverage: number;
   ytdComparison: GastosYtdComparison | null;
+  monthlyTotals: number[];
+  monthlyTotalsPrevious: number[] | null;
+  currentPeriodLabel: string;
+  previousPeriodLabel: string | null;
   stackedByMonth: GastosRestauracionMonthStack[];
   monthlySummary: { monthLabel: string; total: number; tickets: number }[];
   topByVisits: NamedAmount[];

@@ -4,10 +4,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from worker.excel_import.config import SHEETS, TABLES
+from worker.excel_import.config import ENTITY_TABLE, SHEETS, TABLES
 from worker.excel_import.loader import load_workbook_sheets
 from worker.excel_import.mappers import MAPPERS, SELECT_FIELDS
 from worker.excel_import.nocodb_sync import bulk_insert, ensure_table_selects
+from worker.gastos_comun_import.service import ensure_ubicacion_column
 from worker.nocodb import NocoDbClient
 
 
@@ -85,7 +86,7 @@ async def import_excel(
 
     for entity in selected:
         sheet_name = SHEETS[entity]
-        table_id = TABLES[entity]
+        table_id = TABLES[ENTITY_TABLE[entity]]
         raw_rows = sheets[entity]
         mapped_rows, skipped_rows = _map_records(entity, raw_rows, default_persona)
         existing_rows = await client.count_records(table_id)
@@ -127,6 +128,9 @@ async def import_excel(
             result.message = f"Listo para insertar {len(mapped_rows)} filas"
             report.results.append(result)
             continue
+
+        if entity == "gastos_personales":
+            await ensure_ubicacion_column(client, table_id)
 
         result.inserted_rows = await bulk_insert(client, table_id, mapped_rows)
         result.status = "imported"

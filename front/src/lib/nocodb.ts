@@ -123,6 +123,16 @@ export class NocoDbClient {
     };
   }
 
+  async distinctFieldValues(tableId: string, field: string): Promise<string[]> {
+    const raw = await this.listRecords(tableId, { fields: [field] });
+    const values = new Set<string>();
+    for (const record of raw) {
+      const value = String(record[field] ?? "").trim();
+      if (value) values.add(value);
+    }
+    return [...values].sort((a, b) => a.localeCompare(b, "es"));
+  }
+
   async listRecords(
     tableId: string,
     arg?: string | ListRecordsOptions,
@@ -172,8 +182,22 @@ export class NocoDbClient {
     );
   }
 
-  async getTableMeta(tableId: string): Promise<{ columns?: { title: string; colOptions?: { options?: { title?: string }[] } }[] }> {
+  async getTableMeta(tableId: string): Promise<{
+    columns?: {
+      id?: string;
+      title: string;
+      uidt?: string;
+      colOptions?: { options?: { title?: string }[] };
+    }[];
+  }> {
     return this.request(`/api/v2/meta/tables/${tableId}`);
+  }
+
+  async patchColumn(columnId: string, body: Record<string, unknown>): Promise<void> {
+    await this.request(`/api/v2/meta/columns/${columnId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
   }
 
   async getRecord(tableId: string, id: string): Promise<NocoRecord | null> {

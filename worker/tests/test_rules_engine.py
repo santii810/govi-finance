@@ -92,7 +92,12 @@ def test_concepto_exacto_inversiones():
             scope="global",
             account_id=None,
             priority=500,
-            condition={"concepto_exacto": "VANGUARD US 500 STOCK INDEX EU"},
+            condition={
+                "concepto_exacto": [
+                    "VANGUARD US 500 STOCK INDEX EU",
+                    "VANGUARD US 500 STOCK EUR INV",
+                ]
+            },
             actions={
                 "tabla_destino": "Inversiones",
                 "tipo": "Fondo indexado",
@@ -118,6 +123,15 @@ def test_concepto_exacto_inversiones():
     assert result.tabla_destino == "Inversiones"
     assert result.categoria is None
 
+    pending_eur_inv = _movement(200, type="TRADE")
+    pending_eur_inv.concepto = "VANGUARD US 500 STOCK EUR INV"
+    result_eur_inv = apply_rules_to_pending(
+        pending_eur_inv,
+        account_id="trade-republic-santi",
+        nocodb_rules=rules,
+    )
+    assert result_eur_inv.tabla_destino == "Inversiones"
+
 
 def test_exact_rule_overrides_sign_rule_on_negative_importe():
     """Prioridad 500 debe ganar a la regla de signo (0) aunque el importe sea negativo."""
@@ -135,7 +149,12 @@ def test_exact_rule_overrides_sign_rule_on_negative_importe():
             scope="global",
             account_id=None,
             priority=500,
-            condition={"concepto_exacto": "VANGUARD US 500 STOCK INDEX EU"},
+            condition={
+                "concepto_exacto": [
+                    "VANGUARD US 500 STOCK INDEX EU",
+                    "VANGUARD US 500 STOCK EUR INV",
+                ]
+            },
             actions={
                 "tabla_destino": "Inversiones",
                 "tipo": "Fondo indexado",
@@ -188,7 +207,11 @@ def test_invertir_importe_on_negative_inversion():
             scope="global",
             account_id=None,
             priority=500,
-            condition={"concepto_exacto": "AMUNDI INDEX MSCI EMERG MKTS I"},
+            condition={
+                "concepto_regex": (
+                    "(AMUNDI INDEX MSCI EMERG MKTS I|INDEX MSCI EM IE AC EUR @ [\\d.,]+)"
+                )
+            },
             actions={
                 "tabla_destino": "Inversiones",
                 "tipo": "Fondo indexado",
@@ -206,3 +229,23 @@ def test_invertir_importe_on_negative_inversion():
     )
     assert result.tabla_destino == "Inversiones"
     assert result.importe == Decimal("150")
+
+    pending_ie = _movement(-200)
+    pending_ie.concepto = "INDEX MSCI EM IE AC EUR @ 0.13"
+    result_ie = apply_rules_to_pending(
+        pending_ie,
+        account_id="myinvestor-santi",
+        nocodb_rules=rules,
+    )
+    assert result_ie.tabla_destino == "Inversiones"
+    assert result_ie.importe == Decimal("200")
+
+    pending_ie_price = _movement(-180)
+    pending_ie_price.concepto = "INDEX MSCI EM IE AC EUR @ 1.25"
+    result_ie_price = apply_rules_to_pending(
+        pending_ie_price,
+        account_id="myinvestor-santi",
+        nocodb_rules=rules,
+    )
+    assert result_ie_price.tabla_destino == "Inversiones"
+    assert result_ie_price.importe == Decimal("180")

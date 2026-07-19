@@ -9,7 +9,7 @@ import yaml
 
 from worker.models import AccountTipo, Persona
 
-AccountParser = Literal["trade_republic"]
+AccountParser = str
 
 
 @dataclass(frozen=True)
@@ -21,6 +21,7 @@ class Account:
     persona: Persona
     parser: AccountParser
     detection: dict[str, str]
+    nocodb_id: int | None = None
 
 
 def default_accounts_path() -> Path:
@@ -55,13 +56,44 @@ def load_accounts(config_path: Path | None = None) -> list[Account]:
                 persona=row["persona"],
                 parser=row["parser"],
                 detection=row.get("detection", {}),
+                nocodb_id=None,
             )
         )
     return accounts
 
 
-def resolve_account(accounts: list[Account], parser_name: str) -> tuple[Account | None, list[str]]:
+def accounts_for_sender(
+    accounts: list[Account],
+    parser_name: str,
+    sender_persona: Persona,
+) -> list[Account]:
+    """Cuentas que el remitente puede usar: las suyas y las comunes."""
+    return [
+        account
+        for account in accounts
+        if account.parser == parser_name
+        and (account.persona == sender_persona or account.persona == "Común")
+    ]
+
+
+def resolve_account(
+    accounts: list[Account],
+    parser_name: str,
+    *,
+    sender_persona: Persona | None = None,
+) -> tuple[Account | None, list[str]]:
     matches = [a for a in accounts if a.parser == parser_name]
+    if sender_persona is not None:
+        matches = accounts_for_sender(accounts, parser_name, sender_persona)
+        if not matches:
+            all_for_parser = [a for a in accounts if a.parser == parser_name]
+            if not all_for_parser:
+                return None, [f"No hay cuenta configurada para el parser «{parser_name}»"]
+            ids = ", ".join(a.id for a in all_for_parser)
+            return None, [
+                f"No hay cuenta de {sender_persona} para «{parser_name}». "
+                f"Cuentas configuradas: {ids}."
+            ]
     if len(matches) == 1:
         return matches[0], []
     if not matches:

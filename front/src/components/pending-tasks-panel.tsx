@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DateInput } from "@/components/date-input";
 import { formatEur, parseDate } from "@/lib/persona";
 import type { ClassifiedPending, PersonaValue, TablaDestino } from "@/lib/import-rules/types";
 import {
@@ -9,10 +10,16 @@ import {
   type PendingTasksFilters,
 } from "@/lib/pending-tasks-filters";
 import { groupPendingByRegla, getReglaGroupSubtitle, sumPendingImportes } from "@/lib/pending-tasks-groups";
+import {
+  canAcceptPending,
+  isSinClasificar,
+} from "@/lib/pending-classification";
 import { PendingTasksSidebar } from "@/components/pending-tasks-sidebar";
 import { ImportRulesPanel } from "@/components/import-rules-panel";
 import { SearchableSelect } from "@/components/searchable-select";
 import type { FieldOptions } from "@/app/api/automatic-actions/options/route";
+import { defaultIngresosOrigen, effectiveIngresosOrigen } from "@/lib/pending-ingresos-origen";
+import { defaultGastosConcepto } from "@/lib/pending-gastos-concepto";
 
 interface PendingResponse {
   total: number;
@@ -21,13 +28,17 @@ interface PendingResponse {
 
 interface PendingTasksPanelProps {
   onCountChange?: (count: number) => void;
+  /** Tras aceptar/ignorar con éxito: refrescar dashboards (inversión, gastos, etc.). */
+  onDataChanged?: () => void;
 }
 
 /** Edits staged by the user in the inline form (not yet committed) */
 interface EditDraft {
   fecha: string;
   importe: string;
-  concepto: string;
+  destino: string;
+  origen: string;
+  notas: string;
   persona: PersonaValue;
   tablaDestino: TablaDestino | "";
   categoria: string;
@@ -85,6 +96,36 @@ function toInputDate(fecha: string): string {
   return fecha ? fecha.slice(0, 10) : "";
 }
 
+function isEditDraftValid(draft: EditDraft): boolean {
+  if (!draft.tablaDestino) return false;
+  if (draft.tablaDestino === "Gastos") {
+    return Boolean(draft.categoria.trim());
+  }
+  if (draft.tablaDestino === "Ingresos") {
+    return Boolean(draft.categoria.trim() && draft.origen.trim());
+  }
+  if (draft.tablaDestino === "Inversiones") {
+    return Boolean(draft.tipo.trim() && draft.nombre.trim());
+  }
+  return false;
+}
+
+function buildEditDraft(item: ClassifiedPending): EditDraft {
+  return {
+    fecha: toInputDate(item.fecha),
+    importe: String(Math.abs(item.importe)),
+    destino: item.destino?.trim() || defaultGastosConcepto(item.concepto),
+    origen: item.origen?.trim() || defaultIngresosOrigen(item),
+    notas: item.notas ?? "",
+    persona: item.persona,
+    tablaDestino: item.tablaDestino ?? "",
+    categoria: item.categoria ?? "",
+    tipo: item.tipo ?? "",
+    nombre: item.nombre ?? "",
+    entidad: item.entidad ?? "",
+  };
+}
+
 // ─── Fila individual ────────────────────────────────────────────────────────
 
 interface PendingTaskRowProps {
@@ -125,43 +166,42 @@ function PendingTaskRow({
         ? -Math.abs(parseFloat(stagedDraft.importe) || 0)
         : Math.abs(parseFloat(stagedDraft.importe) || 0))
     : item.importe;
-  const displayConcepto = stagedDraft?.concepto ?? item.concepto;
+  const movimientoOriginal = item.concepto?.trim() || "";
   const displayPersona = stagedDraft?.persona ?? item.persona;
   const displayTablaDestino = stagedDraft?.tablaDestino || item.tablaDestino;
+  const displayDestino = (stagedDraft?.destino ?? item.destino)?.trim() || null;
+  const showDestino =
+    displayTablaDestino === "Gastos" &&
+    Boolean(displayDestino) &&
+    displayDestino!.toLowerCase() !== movimientoOriginal.toLowerCase();
+  const displayOrigen = stagedDraft?.origen ?? effectiveIngresosOrigen(item);
+  const displayNotas = stagedDraft?.notas ?? item.notas;
   const displayCategoria = stagedDraft?.categoria ?? item.categoria;
   const displayTipo = stagedDraft?.tipo ?? item.tipo;
   const displayNombre = stagedDraft?.nombre ?? item.nombre;
 
-  const sinCategorizar = !suggestedIgnore && !displayTablaDestino;
-  const canAccept = !suggestedIgnore && Boolean(item.tablaDestino);
+  const displayEntidad = stagedDraft?.entidad ?? item.entidad;
+
+  const effectiveItem: ClassifiedPending = {
+    ...item,
+    tablaDestino: (displayTablaDestino || null) as ClassifiedPending["tablaDestino"],
+    categoria: displayCategoria,
+    tipo: displayTipo,
+    nombre: displayNombre,
+    entidad: displayEntidad,
+    notas: displayNotas,
+  };
+
+  const sinClasificar = isSinClasificar(effectiveItem);
+  const canAccept = canAcceptPending(item);
 
   // Local draft state — initialised from item when edit opens
-  const [draft, setDraft] = useState<EditDraft>({
-    fecha: toInputDate(item.fecha),
-    importe: String(Math.abs(item.importe)),
-    concepto: item.concepto ?? "",
-    persona: item.persona,
-    tablaDestino: item.tablaDestino ?? "",
-    categoria: item.categoria ?? "",
-    tipo: item.tipo ?? "",
-    nombre: item.nombre ?? "",
-    entidad: item.entidad ?? "",
-  });
+  const [draft, setDraft] = useState<EditDraft>(() => buildEditDraft(item));
 
   // Sync draft when item changes externally (e.g. reload)
   useEffect(() => {
     if (!isEditing) {
-      setDraft({
-        fecha: toInputDate(item.fecha),
-        importe: String(Math.abs(item.importe)),
-        concepto: item.concepto ?? "",
-        persona: item.persona,
-        tablaDestino: item.tablaDestino ?? "",
-        categoria: item.categoria ?? "",
-        tipo: item.tipo ?? "",
-        nombre: item.nombre ?? "",
-        entidad: item.entidad ?? "",
-      });
+      setDraft(buildEditDraft(item));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.id]);
@@ -172,6 +212,12 @@ function PendingTaskRow({
       : draft.tablaDestino === "Ingresos"
         ? (fieldOptions?.categoriaIngresos ?? [])
         : [];
+
+  const origenOptions = useMemo(() => {
+    const defaults = [defaultIngresosOrigen(item), item.banco?.trim()].filter(Boolean) as string[];
+    const fromApi = fieldOptions?.origenIngresos ?? [];
+    return [...new Set([...defaults, ...fromApi])].sort((a, b) => a.localeCompare(b, "es"));
+  }, [fieldOptions?.origenIngresos, item]);
 
   const actionLabel =
     staged?.action === "accept"
@@ -194,21 +240,39 @@ function PendingTaskRow({
             >
               {formatEur(displayImporte)}
             </span>
-            <span className="truncate font-medium">{displayConcepto || "—"}</span>
+            <span className="truncate font-medium">{movimientoOriginal || "—"}</span>
             {item.banco && <span className="text-muted">{item.banco}</span>}
           </div>
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
+            {showDestino && (
+              <span>
+                Concepto:{" "}
+                <span className="text-foreground">{displayDestino}</span>
+              </span>
+            )}
+            {!suggestedIgnore && displayTablaDestino === "Ingresos" && (
+              <span>
+                Origen:{" "}
+                <span className="text-foreground">{displayOrigen || "—"}</span>
+              </span>
+            )}
+            {!suggestedIgnore && displayTablaDestino === "Ingresos" && displayNotas && (
+              <span>
+                Notas:{" "}
+                <span className="text-foreground">{displayNotas}</span>
+              </span>
+            )}
             <span>
-              Destino:{" "}
+              Tabla:{" "}
               <span className="text-foreground">
                 {suggestedIgnore
                   ? "Transferencia (ignorar)"
-                  : sinCategorizar
-                    ? "Sin categorizar"
+                  : sinClasificar
+                    ? "Sin clasificar"
                     : (displayTablaDestino ?? "—")}
               </span>
             </span>
-            {!suggestedIgnore && !sinCategorizar && displayTablaDestino === "Inversiones" ? (
+            {!suggestedIgnore && !sinClasificar && displayTablaDestino === "Inversiones" ? (
               <>
                 <span>
                   Tipo: <span className="text-foreground">{displayTipo ?? "—"}</span>
@@ -217,7 +281,7 @@ function PendingTaskRow({
                   Nombre: <span className="text-foreground">{displayNombre ?? "—"}</span>
                 </span>
               </>
-            ) : !suggestedIgnore && !sinCategorizar ? (
+            ) : !suggestedIgnore && !sinClasificar ? (
               <span>
                 Categoría:{" "}
                 <span className="text-foreground">{displayCategoria ?? "—"}</span>
@@ -262,7 +326,7 @@ function PendingTaskRow({
                   onClick={() => onOpenEdit(item.id)}
                   className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
                 >
-                  Categorizar
+                  {sinClasificar && displayTablaDestino ? "Clasificar" : "Categorizar"}
                 </button>
               )}
               <button
@@ -297,14 +361,19 @@ function PendingTaskRow({
           <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted">
             Editar antes de guardar
           </p>
+          {movimientoOriginal && (
+            <p className="mb-3 text-xs text-muted">
+              Movimiento original:{" "}
+              <span className="text-foreground">{movimientoOriginal}</span>
+            </p>
+          )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {/* Fecha */}
             <label className="flex flex-col gap-1">
               <span className="text-xs text-muted">Fecha</span>
-              <input
-                type="date"
+              <DateInput
                 value={draft.fecha}
-                onChange={(e) => setDraft((d) => ({ ...d, fecha: e.target.value }))}
+                onChange={(fecha) => setDraft((d) => ({ ...d, fecha }))}
                 className="rounded-md border border-border bg-card px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
               />
             </label>
@@ -321,32 +390,30 @@ function PendingTaskRow({
               />
             </label>
 
-            {/* Concepto */}
-            <label className="flex flex-col gap-1 sm:col-span-2 lg:col-span-1">
-              <span className="text-xs text-muted">Concepto</span>
-              <input
-                type="text"
-                value={draft.concepto}
-                onChange={(e) => setDraft((d) => ({ ...d, concepto: e.target.value }))}
-                className="rounded-md border border-border bg-card px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
-              />
-            </label>
-
             {/* Tabla destino */}
             <label className="flex flex-col gap-1">
               <span className="text-xs text-muted">Tabla destino</span>
               <select
                 value={draft.tablaDestino}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const tablaDestino = e.target.value as TablaDestino | "";
                   setDraft((d) => ({
                     ...d,
-                    tablaDestino: e.target.value as TablaDestino | "",
+                    tablaDestino,
                     categoria: "",
                     tipo: "",
                     nombre: "",
                     entidad: "",
-                  }))
-                }
+                    destino:
+                      tablaDestino === "Gastos" && !d.destino.trim()
+                        ? defaultGastosConcepto(item.concepto)
+                        : d.destino,
+                    origen:
+                      tablaDestino === "Ingresos" && !d.origen.trim()
+                        ? defaultIngresosOrigen(item)
+                        : d.origen,
+                  }));
+                }}
                 className="rounded-md border border-border bg-card px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
               >
                 <option value="">— sin asignar —</option>
@@ -358,6 +425,51 @@ function PendingTaskRow({
               </select>
             </label>
 
+            {draft.tablaDestino === "Gastos" && (
+              <label className="flex flex-col gap-1 sm:col-span-2 lg:col-span-1">
+                <span className="text-xs text-muted">Concepto</span>
+                <input
+                  type="text"
+                  value={draft.destino}
+                  onChange={(e) => setDraft((d) => ({ ...d, destino: e.target.value }))}
+                  placeholder={defaultGastosConcepto(movimientoOriginal) || "Nombre del gasto"}
+                  className="rounded-md border border-border bg-card px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+                />
+              </label>
+            )}
+
+            {draft.tablaDestino === "Ingresos" && (
+              <label className="flex flex-col gap-1 sm:col-span-2 lg:col-span-1">
+                <span className="text-xs text-muted">Origen (Ingresos)</span>
+                <input
+                  type="text"
+                  list={`origen-${item.id}`}
+                  value={draft.origen}
+                  onChange={(e) => setDraft((d) => ({ ...d, origen: e.target.value }))}
+                  placeholder={defaultIngresosOrigen(item)}
+                  className="rounded-md border border-border bg-card px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+                />
+                <datalist id={`origen-${item.id}`}>
+                  {origenOptions.map((o) => (
+                    <option key={o} value={o} />
+                  ))}
+                </datalist>
+              </label>
+            )}
+
+            {draft.tablaDestino === "Ingresos" && (
+              <label className="flex flex-col gap-1 sm:col-span-2 lg:col-span-1">
+                <span className="text-xs text-muted">Notas (Ingresos)</span>
+                <input
+                  type="text"
+                  value={draft.notas}
+                  onChange={(e) => setDraft((d) => ({ ...d, notas: e.target.value }))}
+                  placeholder="p. ej. emisor del dividendo"
+                  className="rounded-md border border-border bg-card px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+                />
+              </label>
+            )}
+
             {/* Categoría (Gastos/Ingresos) */}
             {draft.tablaDestino !== "Inversiones" && (
               <label className="flex flex-col gap-1">
@@ -367,6 +479,7 @@ function PendingTaskRow({
                     value={draft.categoria}
                     onChange={(categoria) => setDraft((d) => ({ ...d, categoria }))}
                     options={categoriaOptions}
+                    allowCreate
                   />
                 ) : (
                   <input
@@ -446,7 +559,7 @@ function PendingTaskRow({
             </button>
             <button
               type="button"
-              disabled={!draft.tablaDestino}
+              disabled={!isEditDraftValid(draft)}
               onClick={() => onModify(item.id, draft)}
               className="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
             >
@@ -461,7 +574,7 @@ function PendingTaskRow({
 
 // ─── Panel principal ─────────────────────────────────────────────────────────
 
-export function PendingTasksPanel({ onCountChange }: PendingTasksPanelProps) {
+export function PendingTasksPanel({ onCountChange, onDataChanged }: PendingTasksPanelProps) {
   const [items, setItems] = useState<ClassifiedPending[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -477,16 +590,21 @@ export function PendingTasksPanel({ onCountChange }: PendingTasksPanelProps) {
   >(new Map());
   const [stagedSnapshot, setStagedSnapshot] = useState<Map<string, StagedAction>>(new Map());
   const [committingIds, setCommittingIds] = useState<Set<string>>(new Set());
-  const [bulkGroupAction, setBulkGroupAction] = useState<{
-    groupKey: string;
-    ids: string[];
-    action: "accept" | "ignore";
-    expiresAt: number;
-    secondsLeft: number;
-    committing: boolean;
-  } | null>(null);
-  const bulkGroupTimerRef = useRef<number | null>(null);
-  const bulkGroupTickRef = useRef<number | null>(null);
+  const [bulkGroupActions, setBulkGroupActions] = useState<
+    Map<
+      string,
+      {
+        ids: string[];
+        action: "accept" | "ignore";
+        expiresAt: number;
+        secondsLeft: number;
+        committing: boolean;
+      }
+    >
+  >(new Map());
+  const bulkGroupTimersRef = useRef<Map<string, { timerId: number; tickId: number }>>(
+    new Map(),
+  );
 
   const filteredItems = useMemo(
     () => applyPendingFilters(items, filters),
@@ -510,12 +628,16 @@ export function PendingTasksPanel({ onCountChange }: PendingTasksPanelProps) {
   }
 
   // Cargar opciones de campos al montar
-  useEffect(() => {
+  const reloadFieldOptions = useCallback(() => {
     fetch("/api/automatic-actions/options")
       .then((r) => r.json())
       .then((data: FieldOptions) => setFieldOptions(data))
       .catch(() => {/* no bloquear si falla */});
   }, []);
+
+  useEffect(() => {
+    reloadFieldOptions();
+  }, [reloadFieldOptions]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -543,13 +665,16 @@ export function PendingTasksPanel({ onCountChange }: PendingTasksPanelProps) {
 
   useEffect(() => {
     const staged = stagedRef.current;
+    const bulkTimers = bulkGroupTimersRef.current;
     return () => {
       for (const s of staged.values()) {
         window.clearTimeout(s.timerId);
         window.clearInterval(s.tickId);
       }
-      if (bulkGroupTimerRef.current) window.clearTimeout(bulkGroupTimerRef.current);
-      if (bulkGroupTickRef.current) window.clearInterval(bulkGroupTickRef.current);
+      for (const t of bulkTimers.values()) {
+        window.clearTimeout(t.timerId);
+        window.clearInterval(t.tickId);
+      }
     };
   }, []);
 
@@ -595,7 +720,9 @@ export function PendingTasksPanel({ onCountChange }: PendingTasksPanelProps) {
           action: "modify",
           fecha: d.fecha || undefined,
           importe: d.importe ? parseFloat(d.importe) : undefined,
-          concepto: d.concepto || undefined,
+          destino: d.destino || undefined,
+          origen: d.origen || undefined,
+          notas: d.notas || null,
           persona: d.persona || undefined,
           tablaDestino: d.tablaDestino || undefined,
           categoria: d.categoria || null,
@@ -618,6 +745,8 @@ export function PendingTasksPanel({ onCountChange }: PendingTasksPanelProps) {
 
       setItems((prev) => prev.filter((row) => row.id !== id));
       bumpCount(-1);
+      onDataChanged?.();
+      reloadFieldOptions();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error desconocido");
     } finally {
@@ -632,7 +761,7 @@ export function PendingTasksPanel({ onCountChange }: PendingTasksPanelProps) {
   function stageAction(id: string, action: "accept" | "ignore" | "modify", draft?: EditDraft) {
     if (action === "accept") {
       const item = items.find((row) => row.id === id);
-      if (item && !item.ignorar && !item.tablaDestino) return;
+      if (!item || !canAcceptPending(item)) return;
     }
     cancelAction(id);
 
@@ -666,12 +795,22 @@ export function PendingTasksPanel({ onCountChange }: PendingTasksPanelProps) {
     }
   }
 
-  function cancelBulkGroupAction() {
-    if (bulkGroupTimerRef.current) window.clearTimeout(bulkGroupTimerRef.current);
-    if (bulkGroupTickRef.current) window.clearInterval(bulkGroupTickRef.current);
-    bulkGroupTimerRef.current = null;
-    bulkGroupTickRef.current = null;
-    setBulkGroupAction(null);
+  function clearBulkGroupTimers(groupKey: string) {
+    const timers = bulkGroupTimersRef.current.get(groupKey);
+    if (!timers) return;
+    window.clearTimeout(timers.timerId);
+    window.clearInterval(timers.tickId);
+    bulkGroupTimersRef.current.delete(groupKey);
+  }
+
+  function cancelBulkGroupAction(groupKey: string) {
+    clearBulkGroupTimers(groupKey);
+    setBulkGroupActions((prev) => {
+      if (!prev.has(groupKey)) return prev;
+      const next = new Map(prev);
+      next.delete(groupKey);
+      return next;
+    });
   }
 
   async function commitBulkGroupAction(
@@ -679,19 +818,22 @@ export function PendingTasksPanel({ onCountChange }: PendingTasksPanelProps) {
     ids: string[],
     action: "accept" | "ignore",
   ) {
-    cancelBulkGroupAction();
-    setBulkGroupAction({
-      groupKey,
-      ids,
-      action,
-      expiresAt: 0,
-      secondsLeft: 0,
-      committing: true,
+    clearBulkGroupTimers(groupKey);
+    setBulkGroupActions((prev) => {
+      const next = new Map(prev);
+      next.set(groupKey, {
+        ids,
+        action,
+        expiresAt: 0,
+        secondsLeft: 0,
+        committing: true,
+      });
+      return next;
     });
     setError("");
 
     try {
-      await Promise.all(
+      const results = await Promise.allSettled(
         ids.map(async (id) => {
           const res = await fetch(`/api/automatic-actions/${id}`, {
             method: "POST",
@@ -702,14 +844,41 @@ export function PendingTasksPanel({ onCountChange }: PendingTasksPanelProps) {
             const body = (await res.json()) as { error?: string };
             throw new Error(body.error ?? "Error al procesar");
           }
+          return id;
         }),
       );
-      setItems((prev) => prev.filter((row) => !ids.includes(row.id)));
-      bumpCount(-ids.length);
+
+      const succeeded = results
+        .filter((r): r is PromiseFulfilledResult<string> => r.status === "fulfilled")
+        .map((r) => r.value);
+      const failed = results.filter((r) => r.status === "rejected");
+
+      if (succeeded.length > 0) {
+        setItems((prev) => prev.filter((row) => !succeeded.includes(row.id)));
+        bumpCount(-succeeded.length);
+        onDataChanged?.();
+        reloadFieldOptions();
+      }
+
+      if (failed.length > 0) {
+        const first = failed[0] as PromiseRejectedResult;
+        const detail =
+          failed.length === 1
+            ? (first.reason instanceof Error ? first.reason.message : "Error al procesar")
+            : `${failed.length} de ${ids.length} no se procesaron. ${
+                first.reason instanceof Error ? first.reason.message : "Error al procesar"
+              }`;
+        setError(detail);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error desconocido");
     } finally {
-      setBulkGroupAction(null);
+      setBulkGroupActions((prev) => {
+        if (!prev.has(groupKey)) return prev;
+        const next = new Map(prev);
+        next.delete(groupKey);
+        return next;
+      });
     }
   }
 
@@ -721,30 +890,38 @@ export function PendingTasksPanel({ onCountChange }: PendingTasksPanelProps) {
     const pendingIds = ids.filter((id) => !stagedRef.current.has(id));
     if (pendingIds.length === 0) return;
 
-    cancelBulkGroupAction();
+    cancelBulkGroupAction(groupKey);
     const expiresAt = Date.now() + COMMIT_MS;
 
-    bulkGroupTickRef.current = window.setInterval(() => {
-      setBulkGroupAction((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          secondsLeft: Math.max(0, Math.ceil((prev.expiresAt - Date.now()) / 1000)),
-        };
+    const tickId = window.setInterval(() => {
+      setBulkGroupActions((prev) => {
+        const entry = prev.get(groupKey);
+        if (!entry || entry.committing) return prev;
+        const next = new Map(prev);
+        next.set(groupKey, {
+          ...entry,
+          secondsLeft: Math.max(0, Math.ceil((entry.expiresAt - Date.now()) / 1000)),
+        });
+        return next;
       });
     }, TICK_MS);
 
-    bulkGroupTimerRef.current = window.setTimeout(() => {
+    const timerId = window.setTimeout(() => {
       commitBulkGroupAction(groupKey, pendingIds, action);
     }, COMMIT_MS);
 
-    setBulkGroupAction({
-      groupKey,
-      ids: pendingIds,
-      action,
-      expiresAt,
-      secondsLeft: Math.ceil(COMMIT_MS / 1000),
-      committing: false,
+    bulkGroupTimersRef.current.set(groupKey, { timerId, tickId });
+
+    setBulkGroupActions((prev) => {
+      const next = new Map(prev);
+      next.set(groupKey, {
+        ids: pendingIds,
+        action,
+        expiresAt,
+        secondsLeft: Math.ceil(COMMIT_MS / 1000),
+        committing: false,
+      });
+      return next;
     });
   }
 
@@ -814,12 +991,11 @@ export function PendingTasksPanel({ onCountChange }: PendingTasksPanelProps) {
                 const showBulk = !group.sinCategorizar;
                 const bulkAction = group.ignorar ? "ignore" : "accept";
                 const bulkLabel = group.ignorar ? "Ignorar todo" : "Aceptar todo";
-                const bulkPending =
-                  bulkGroupAction?.groupKey === group.key && !bulkGroupAction.committing;
-                const bulkCommitting =
-                  bulkGroupAction?.groupKey === group.key && bulkGroupAction.committing;
+                const bulkState = bulkGroupActions.get(group.key);
+                const bulkPending = Boolean(bulkState && !bulkState.committing);
+                const bulkCommitting = Boolean(bulkState?.committing);
                 const bulkProgressLabel =
-                  bulkGroupAction?.action === "accept" ? "Aceptando todo" : "Ignorando todo";
+                  bulkState?.action === "accept" ? "Aceptando todo" : "Ignorando todo";
 
                 return (
                   <section
@@ -854,11 +1030,11 @@ export function PendingTasksPanel({ onCountChange }: PendingTasksPanelProps) {
                         {bulkPending ? (
                           <>
                             <span className="text-sm text-muted">
-                              {bulkProgressLabel} ({bulkGroupAction?.secondsLeft}s)
+                              {bulkProgressLabel} ({bulkState?.secondsLeft}s)
                             </span>
                             <button
                               type="button"
-                              onClick={cancelBulkGroupAction}
+                              onClick={() => cancelBulkGroupAction(group.key)}
                               className="rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-background"
                             >
                               Cancelar

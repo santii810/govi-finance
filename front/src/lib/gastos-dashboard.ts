@@ -17,6 +17,7 @@ import {
   type PivotDrilldownMove,
 } from "./pivot-drilldown";
 import { GASTOS_FIELDS } from "./table-fields";
+import type { PersonaValue } from "./manual-insert/types";
 import type {
   GastosData,
   GastosFilterMode,
@@ -42,13 +43,20 @@ const CATEGORY_BY_SUBTAB: Partial<Record<GastosSubTab, string>> = {
   piso: "Piso",
   viajes: "Viaxes",
   restauracion: "Restauración",
+  transporte: "Transporte",
 };
 
 interface GastoRecord {
+  id: string;
   date: Date;
+  fechaIso: string;
   amount: number;
+  rawAmount: number;
+  cantidadRaw: string;
   categoria: string;
   nombre: string;
+  fuente: string;
+  persona: string;
   ubicacion: string | null;
   year: string;
   monthIndex: number;
@@ -63,11 +71,22 @@ function mapGastos(records: Record<string, unknown>[], timezone: string): GastoR
       const rawAmount = parseAmount(r.Cantidad ?? r.Gasto);
       if (!date || rawAmount === 0) return null;
       const parts = getDateParts(date, timezone);
+      const categoriaRaw = r.Categoría ?? r.Categoria;
+      const categoria =
+        categoriaRaw != null && String(categoriaRaw).trim() !== ""
+          ? String(categoriaRaw)
+          : "Sin categoría";
       return {
+        id: String(r.Id ?? ""),
         date,
+        fechaIso: String(r.Date ?? r.Fecha ?? "").slice(0, 10),
         amount: attributedAmount(rawAmount, r.Persona),
-        categoria: String(r.Categoría ?? r.Categoria ?? "Sin categoría"),
+        rawAmount,
+        cantidadRaw: String(r.Cantidad ?? r.Gasto ?? rawAmount),
+        categoria,
         nombre: String(r.Destino ?? r.Nombre ?? "Sin nombre"),
+        fuente: String(r.Fuente ?? ""),
+        persona: String(r.Persona ?? ""),
         ubicacion: String(r.Ubicación ?? r.Ubicacion ?? "").trim() || null,
         year: parts.year,
         monthIndex: parts.monthIndex,
@@ -158,6 +177,8 @@ interface YtdContext {
   refParts: DateParts;
   availableYears: string[];
   enabled: boolean;
+  filterFrom: string;
+  filterTo: string;
 }
 
 function ytdFromContext(ctx: YtdContext): GastosYtdComparison | null {
@@ -174,10 +195,6 @@ function sumByKey(records: GastoRecord[], keyFn: (r: GastoRecord) => string): Na
   return [...totals.entries()]
     .sort(([, a], [, b]) => b - a)
     .map(([name, total]) => ({ name, total }));
-}
-
-function sumByField(records: GastoRecord[], field: "categoria" | "nombre"): NamedAmount[] {
-  return sumByKey(records, (r) => r[field]);
 }
 
 function countByField(records: GastoRecord[], field: "nombre"): NamedAmount[] {
@@ -236,11 +253,24 @@ function buildMonthlyTable(
 }
 
 function gastoPivotMove(record: GastoRecord, timezone: string): PivotDrilldownMove {
-  return {
+  const move: PivotDrilldownMove = {
     date: formatPivotDate(record.date, timezone),
     label: record.nombre,
     amount: record.amount,
     meta: record.categoria,
+  };
+  if (!record.id) return move;
+  return {
+    ...move,
+    recordId: record.id,
+    gastosEdit: {
+      fecha: record.fechaIso,
+      cantidad: record.cantidadRaw,
+      destino: record.nombre === "Sin nombre" ? "" : record.nombre,
+      fuente: record.fuente,
+      persona: (record.persona as PersonaValue) || "",
+      categoria: record.categoria === "Sin categoría" ? "" : record.categoria,
+    },
   };
 }
 
@@ -249,6 +279,7 @@ export type GastosDrilldownView = "overview" | "nombre" | "viajes";
 function filterDrilldownRecords(
   records: GastoRecord[],
   view: GastosDrilldownView,
+  subTab: GastosSubTab,
   row: string,
   col: string,
 ): GastoRecord[] {
@@ -257,7 +288,8 @@ function filterDrilldownRecords(
       return MONTH_LABELS[record.monthIndex] === row && categoriaNivel1(record.categoria) === col;
     }
     if (view === "nombre") {
-      return MONTH_LABELS[record.monthIndex] === row && record.nombre === col;
+      const groupLabel = subTab === "transporte" ? transporteGroupLabel(record) : record.nombre;
+      return MONTH_LABELS[record.monthIndex] === row && groupLabel === col;
     }
     return record.ubicacion === row && viajeCategoriaNivel1(record.categoria) === col;
   });
@@ -289,6 +321,16 @@ async function prepareGastosDataset(
     if (availableYears.includes(comparisonYear)) {
       fetchFrom = Math.min(fetchFrom, Number(comparisonYear));
     }
+  } else {
+    const span = fetchTo - fetchFrom + 1;
+    const prevFrom = fetchFrom - span;
+    const hasPrevData = availableYears.some((y) => {
+      const n = Number(y);
+      return n >= prevFrom && n < fetchFrom;
+    });
+    if (hasPrevData) {
+      fetchFrom = Math.min(fetchFrom, prevFrom);
+    }
   }
   const { from: apiFrom, to: apiTo } = yearBoundsIso(String(fetchFrom), String(fetchTo));
 
@@ -308,6 +350,8 @@ async function prepareGastosDataset(
     refParts: getDateParts(new Date(), timezone),
     availableYears,
     enabled: singleYearFilter,
+    filterFrom: filter.from,
+    filterTo: filter.to,
   };
 
   return { filtered, availableYears, filter: { mode, ...filter }, ytd };
@@ -355,7 +399,7 @@ export async function fetchGastosDrilldown(
     yearFrom,
     yearTo,
   );
-  return filterDrilldownRecords(records, view, row, col)
+  return filterDrilldownRecords(records, view, subTab, row, col)
     .sort((a, b) => b.date.getTime() - a.date.getTime())
     .map((record) => gastoPivotMove(record, timezone));
 }
@@ -376,6 +420,71 @@ function monthlyEvolution(records: GastoRecord[]): number[] {
   return totalsByMonth.map((totals) =>
     totals.length === 0 ? 0 : totals.reduce((a, b) => a + b, 0) / totals.length,
   );
+}
+
+function currentPeriodLabel(from: string, to: string): string {
+  if (from === to) return from;
+  return `${from}–${to}`;
+}
+
+function previousPeriodLabel(from: string, to: string): string {
+  const span = Number(to) - Number(from) + 1;
+  const prevFrom = String(Number(from) - span);
+  const prevTo = String(Number(to) - span);
+  if (prevFrom === prevTo) return prevFrom;
+  return `${prevFrom}–${prevTo}`;
+}
+
+function monthlyEvolutionPrevious(
+  ytd: YtdContext,
+): { values: number[]; label: string } | null {
+  const span = Number(ytd.filterTo) - Number(ytd.filterFrom) + 1;
+  const prevFrom = String(Number(ytd.filterFrom) - span);
+  const prevTo = String(Number(ytd.filterTo) - span);
+
+  const hasPrevData = ytd.availableYears.some((y) => {
+    const n = Number(y);
+    return n >= Number(prevFrom) && n <= Number(prevTo);
+  });
+  if (!hasPrevData) return null;
+
+  const prevRecords = filterByYears(ytd.comparisonRecords, prevFrom, prevTo);
+  if (prevRecords.length === 0) return null;
+
+  return {
+    values: monthlyEvolution(prevRecords),
+    label: previousPeriodLabel(ytd.filterFrom, ytd.filterTo),
+  };
+}
+
+function monthlyTotalsByMonthIndex(records: GastoRecord[]): number[] {
+  const totals = Array.from({ length: 12 }, () => 0);
+  for (const r of records) {
+    totals[r.monthIndex] += r.amount;
+  }
+  return totals;
+}
+
+function monthlyTotalsPrevious(
+  ytd: YtdContext,
+): { values: number[]; label: string } | null {
+  const span = Number(ytd.filterTo) - Number(ytd.filterFrom) + 1;
+  const prevFrom = String(Number(ytd.filterFrom) - span);
+  const prevTo = String(Number(ytd.filterTo) - span);
+
+  const hasPrevData = ytd.availableYears.some((y) => {
+    const n = Number(y);
+    return n >= Number(prevFrom) && n <= Number(prevTo);
+  });
+  if (!hasPrevData) return null;
+
+  const prevRecords = filterByYears(ytd.comparisonRecords, prevFrom, prevTo);
+  if (prevRecords.length === 0) return null;
+
+  return {
+    values: monthlyTotalsByMonthIndex(prevRecords),
+    label: previousPeriodLabel(ytd.filterFrom, ytd.filterTo),
+  };
 }
 
 function monthlyAverage(records: GastoRecord[]): number {
@@ -428,10 +537,48 @@ function buildOverview(records: GastoRecord[], ytd: YtdContext): GastosOverviewD
   return {
     total,
     records: records.length,
+    monthlyAverage: monthlyAverage(records),
     ytdComparison: ytdFromContext(ytd),
     byCategoria,
     categoriaKeys: keys,
     monthlyTable,
+  };
+}
+
+function transporteGroupLabel(record: GastoRecord): string {
+  if (record.categoria.startsWith("Transporte_")) {
+    return record.categoria.slice("Transporte_".length).split("_")[0] || record.categoria;
+  }
+  return record.nombre;
+}
+
+function buildGroupedDetail(
+  records: GastoRecord[],
+  timezone: string,
+  showMonthlyTable: boolean,
+  ytd: YtdContext,
+  groupKey: (r: GastoRecord) => string,
+): GastosNombreData {
+  const byGroup = sumByKey(records, groupKey);
+  const nameKeys = byGroup.map((n) => n.name);
+  const total = records.reduce((sum, r) => sum + r.amount, 0);
+  const prevEvolution = monthlyEvolutionPrevious(ytd);
+
+  return {
+    total,
+    records: records.length,
+    monthlyAverage: monthlyAverage(records),
+    ytdComparison: ytdFromContext(ytd),
+    byNombre: byGroup,
+    nameKeys,
+    monthlyEvolution: monthlyEvolution(records),
+    monthlyEvolutionPrevious: prevEvolution?.values ?? null,
+    currentPeriodLabel: currentPeriodLabel(ytd.filterFrom, ytd.filterTo),
+    previousPeriodLabel: prevEvolution?.label ?? null,
+    monthlyByNombre: showMonthlyTable
+      ? buildMonthlyTable(records, nameKeys, groupKey)
+      : undefined,
+    recentMoves: recentMoves(records, timezone),
   };
 }
 
@@ -441,22 +588,7 @@ function buildNombreDetail(
   showMonthlyTable: boolean,
   ytd: YtdContext,
 ): GastosNombreData {
-  const byNombre = sumByField(records, "nombre");
-  const nameKeys = byNombre.map((n) => n.name);
-  const total = records.reduce((sum, r) => sum + r.amount, 0);
-
-  return {
-    total,
-    monthlyAverage: monthlyAverage(records),
-    ytdComparison: ytdFromContext(ytd),
-    byNombre,
-    nameKeys,
-    monthlyEvolution: monthlyEvolution(records),
-    monthlyByNombre: showMonthlyTable
-      ? buildMonthlyTable(records, nameKeys, (r) => r.nombre)
-      : undefined,
-    recentMoves: recentMoves(records, timezone),
-  };
+  return buildGroupedDetail(records, timezone, showMonthlyTable, ytd, (r) => r.nombre);
 }
 
 function viajeCategoriaNivel1(categoria: string): string {
@@ -588,11 +720,17 @@ function buildRestauracion(records: GastoRecord[], timezone: string, ytd: YtdCon
   });
 
   const total = records.reduce((sum, r) => sum + r.amount, 0);
+  const prevTotals = monthlyTotalsPrevious(ytd);
 
   return {
     total,
+    records: records.length,
     monthlyAverage: monthlyAverage(records),
     ytdComparison: ytdFromContext(ytd),
+    monthlyTotals: monthlyTotalsByMonthIndex(records),
+    monthlyTotalsPrevious: prevTotals?.values ?? null,
+    currentPeriodLabel: currentPeriodLabel(ytd.filterFrom, ytd.filterTo),
+    previousPeriodLabel: prevTotals?.label ?? null,
     stackedByMonth,
     monthlySummary,
     topByVisits: countByField(records, "nombre").slice(0, 10),
@@ -619,6 +757,12 @@ function buildPayload(
   }
   if (subTab === "viajes") {
     return { kind: "viajes", data: buildViajes(records, ytd) };
+  }
+  if (subTab === "transporte") {
+    return {
+      kind: "nombre",
+      data: buildGroupedDetail(records, timezone, true, ytd, transporteGroupLabel),
+    };
   }
   return { kind: "restauracion", data: buildRestauracion(records, timezone, ytd) };
 }

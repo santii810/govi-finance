@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "run":
         try:
-            archive = run_backup_sync(config)
+            archive = run_backup_sync(config, source="manual")
         except Exception as exc:
             print(f"Backup fallido: {exc}", file=sys.stderr)
             return 1

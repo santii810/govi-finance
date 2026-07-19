@@ -1,25 +1,17 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
-from datetime import datetime
-from zoneinfo import ZoneInfo
-
-from croniter import croniter
 
 from backup_manager.config import BackupConfig
+from backup_manager.fingerprint import has_changes_since_last_backup
+from backup_manager.nocodb import NocoDbClient
 from backup_manager.runner import run_backup_sync
+from backup_manager.schedule_utils import seconds_until_next_run
 from backup_manager.trigger_server import start_trigger_server
 
 logger = logging.getLogger(__name__)
-
-
-def _seconds_until_next_run(schedule: str, timezone: str) -> float:
-    tz = ZoneInfo(timezone)
-    now = datetime.now(tz)
-    cron = croniter(schedule, now)
-    next_run = cron.get_next(datetime)
-    return max(0.0, (next_run - now).total_seconds())
 
 
 def scheduler_loop(config: BackupConfig) -> None:
@@ -31,10 +23,17 @@ def scheduler_loop(config: BackupConfig) -> None:
         config.provider,
     )
     while True:
-        delay = _seconds_until_next_run(config.schedule, config.timezone)
+        delay = seconds_until_next_run(config.schedule, config.timezone)
         logger.info("Próximo backup en %.0f segundos", delay)
         time.sleep(delay)
         try:
+            client = NocoDbClient(config.nocodb_url, config.nocodb_token)
+            changed = asyncio.run(
+                has_changes_since_last_backup(client, config.base_id, config.staging_dir)
+            )
+            if not changed:
+                logger.info("Sin cambios desde el último backup; se omite la copia programada")
+                continue
             run_backup_sync(config)
         except Exception:
             logger.exception("Backup fallido; se reintentará en el siguiente ciclo")

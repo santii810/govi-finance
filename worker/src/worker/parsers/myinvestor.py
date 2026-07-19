@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+from decimal import Decimal
 from pathlib import Path
 
 from worker.models import RawMovement
@@ -18,6 +20,53 @@ _MYINVESTOR_HEADERS = {"fecha_operacion", "concepto", "importe"}
 
 def parser_name() -> str:
     return "myinvestor"
+
+
+def format_importe_for_key(importe: Decimal) -> str:
+    text = format(importe, "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def build_canonical_idempotency_key(
+    *,
+    fecha: date,
+    fecha_valor: date | None,
+    concepto: str,
+    importe: Decimal,
+) -> str:
+    """Clave estable independiente del formato del export (Excel vs CSV ';')."""
+    parts = [fecha.isoformat()]
+    if fecha_valor is not None:
+        parts.append(fecha_valor.isoformat())
+    parts.append(concepto.strip() or "Movimiento")
+    parts.append(format_importe_for_key(importe))
+    return "|".join(parts)
+
+
+def canonicalize_legacy_key(legacy: str) -> str | None:
+    """Convierte keys Excel/CSV históricas a la forma canónica. None si no parsea."""
+    parts = [part.strip() for part in legacy.split("|") if part.strip()]
+    if len(parts) < 3:
+        return None
+    try:
+        fecha = parse_date_flexible(parts[0])
+        importe = parse_decimal(parts[-1])
+        if len(parts) == 3:
+            fecha_valor: date | None = None
+            concepto = parts[1]
+        else:
+            fecha_valor = parse_date_flexible(parts[1])
+            concepto = "|".join(parts[2:-1])
+    except ValueError:
+        return None
+    return build_canonical_idempotency_key(
+        fecha=fecha,
+        fecha_valor=fecha_valor,
+        concepto=concepto,
+        importe=importe,
+    )
 
 
 def can_parse(path: Path, content: str | None = None) -> bool:
@@ -72,14 +121,26 @@ def _from_row(row: dict[str, str]) -> RawMovement | None:
 
     fecha = parse_date_flexible(row.get("fecha_operacion", ""))
     concepto = row.get("concepto", "").strip() or "Movimiento"
-    fecha_valor = row.get("fecha_valor", "").strip()
+    fecha_valor_raw = row.get("fecha_valor", "").strip()
+    fecha_valor: date | None = None
+    if fecha_valor_raw:
+        try:
+            fecha_valor = parse_date_flexible(fecha_valor_raw)
+        except ValueError:
+            fecha_valor = None
     metadata = {
         key: row[key].strip()
         for key in ("fecha_valor", "divisa")
         if row.get(key, "").strip()
     }
-    referencia = "|".join(
-        part for part in (row.get("fecha_operacion", "").strip(), fecha_valor, concepto, row.get("importe", "").strip()) if part
+    if fecha_valor is not None:
+        metadata["fecha_valor"] = fecha_valor.isoformat()
+
+    referencia = build_canonical_idempotency_key(
+        fecha=fecha,
+        fecha_valor=fecha_valor,
+        concepto=concepto,
+        importe=importe,
     )
 
     return RawMovement(

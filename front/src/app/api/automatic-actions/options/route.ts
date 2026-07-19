@@ -7,6 +7,7 @@ import { parseSelectOptions, selectOptionsList, sortOptionsAlpha } from "@/lib/t
 export interface FieldOptions {
   categoriaGastos: string[];
   categoriaIngresos: string[];
+  origenIngresos: string[];
   tipoInversiones: string[];
   entidadInversiones: string[];
   persona: string[];
@@ -24,10 +25,11 @@ export async function GET() {
 
     const client = new NocoDbClient(nocodbUrl, nocodbToken);
 
-    const [gastosMeta, ingresosMeta, inversionesMeta] = await Promise.all([
+    const [gastosMeta, ingresosMeta, inversionesMeta, entidadInversiones] = await Promise.all([
       client.getTableMeta(TABLES.gastos),
       client.getTableMeta(TABLES.ingresos),
       client.getTableMeta(TABLES.inversiones),
+      client.distinctFieldValues(TABLES.inversiones, "Entidad"),
     ]);
 
     const gastosOptions = parseSelectOptions(gastosMeta.columns ?? []);
@@ -37,8 +39,14 @@ export async function GET() {
     const options: FieldOptions = {
       categoriaGastos: selectOptionsList(gastosOptions, "Categoría"),
       categoriaIngresos: selectOptionsList(ingresosOptions, "Categoría"),
+      origenIngresos: selectOptionsList(ingresosOptions, "Origen"),
       tipoInversiones: selectOptionsList(inversionesOptions, "Tipo"),
-      entidadInversiones: selectOptionsList(inversionesOptions, "Entidad"),
+      entidadInversiones: sortOptionsAlpha(
+        new Set([
+          ...selectOptionsList(inversionesOptions, "Entidad"),
+          ...entidadInversiones,
+        ]),
+      ),
       persona: sortOptionsAlpha(["Santi", "Sandra", "Común"]),
       tablaDestino: sortOptionsAlpha(["Gastos", "Ingresos", "Inversiones"]),
     };

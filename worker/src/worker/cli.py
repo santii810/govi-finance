@@ -37,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     import_excel_cmd.add_argument("file", type=Path, help="Ruta al Excel (p. ej. Finanzas.xlsx)")
     import_excel_cmd.add_argument(
         "--only",
-        help="Entidades separadas por coma: gastos,ingresos,inversiones,patrimonio",
+        help="Entidades separadas por coma: gastos,gastos_personales,ingresos,inversiones,patrimonio",
     )
     import_excel_cmd.add_argument(
         "--persona",

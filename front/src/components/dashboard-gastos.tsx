@@ -28,7 +28,7 @@ export function DashboardGastos() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const [subTab, setSubTab] = useState<GastosSubTab>("vida");
+  const [subTab, setSubTab] = useState<GastosSubTab>("general");
   const [mode, setMode] = useState<GastosFilterMode>("current");
   const [yearFrom, setYearFrom] = useState("2012");
   const [yearTo, setYearTo] = useState(new Date().getFullYear().toString());
@@ -81,13 +81,17 @@ export function DashboardGastos() {
       return <OverviewView data={payload.data} filterQuery={filterQuery} />;
     }
     if (payload.kind === "nombre") {
-      const sectionLabel =
-        data!.subTab === "supermercado" ? "Por supermercado" : "Por concepto";
+      const sectionLabels: Partial<Record<GastosSubTab, string>> = {
+        supermercado: "Por supermercado",
+        piso: "Por concepto",
+        transporte: "Por subcategoría",
+      };
+      const sectionLabel = sectionLabels[data!.subTab] ?? "Por concepto";
       return (
         <NombreView
           data={payload.data}
           sectionLabel={sectionLabel}
-          showMonthlyTable={data!.subTab === "piso"}
+          showMonthlyTable={data!.subTab === "piso" || data!.subTab === "transporte"}
           filterQuery={filterQuery}
         />
       );

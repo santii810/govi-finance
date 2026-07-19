@@ -1,14 +1,17 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+import { colorMapForKeys } from "@/components/gastos/colors";
 import { formatEur } from "@/lib/persona";
 import type { NamedAmount } from "@/lib/types";
 
@@ -16,9 +19,20 @@ interface HorizontalBarChartProps {
   title: string;
   data: NamedAmount[];
   color?: string;
+  colorMap?: Record<string, string>;
 }
 
-export function HorizontalBarChart({ title, data, color = "#16a34a" }: HorizontalBarChartProps) {
+export function HorizontalBarChart({
+  title,
+  data,
+  color = "#16a34a",
+  colorMap: colorMapProp,
+}: HorizontalBarChartProps) {
+  const keys = useMemo(() => data.map((d) => d.name), [data]);
+  const colorMap = useMemo(
+    () => colorMapProp ?? colorMapForKeys(keys),
+    [colorMapProp, keys],
+  );
   const chartData = data.map((d) => ({ name: d.name, total: d.total }));
 
   return (
@@ -31,7 +45,16 @@ export function HorizontalBarChart({ title, data, color = "#16a34a" }: Horizonta
             <XAxis type="number" tick={{ fontSize: 11 }} stroke="#64748b" tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
             <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11 }} stroke="#64748b" />
             <Tooltip formatter={(value: number) => formatEur(value)} />
-            <Bar dataKey="total" fill={color} radius={[0, 4, 4, 0]} label={{ position: "right", formatter: (v: number) => formatEur(v), fontSize: 10 }} />
+            <Bar
+              dataKey="total"
+              fill={color}
+              radius={[0, 4, 4, 0]}
+              label={{ position: "right", formatter: (v: number) => formatEur(v), fontSize: 10 }}
+            >
+              {chartData.map((entry) => (
+                <Cell key={entry.name} fill={colorMap[entry.name] ?? color} />
+              ))}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>

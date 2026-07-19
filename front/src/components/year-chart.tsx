@@ -6,6 +6,7 @@ import {
   BarChart,
   CartesianGrid,
   Legend,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -18,16 +19,18 @@ interface YearChartProps {
   data: MonthlyBar[];
 }
 
-type SeriesKey = "ingresos" | "gastos" | "inversion";
+type SeriesKey = "ingresos" | "gastos" | "inversion" | "ahorro";
 
 const SERIES: { key: SeriesKey; name: string; fill: string }[] = [
   { key: "ingresos", name: "Ingresos", fill: "#16a34a" },
   { key: "gastos", name: "Gastos", fill: "#dc2626" },
   { key: "inversion", name: "Inversión", fill: "#2563eb" },
+  { key: "ahorro", name: "Ahorro", fill: "#d97706" },
 ];
 
 export function YearChart({ data }: YearChartProps) {
   const [hidden, setHidden] = useState<Partial<Record<SeriesKey, boolean>>>({});
+  const hasNegativeAhorro = data.some((d) => d.ahorro < 0);
 
   function toggleSeries(dataKey: string | number | undefined) {
     if (dataKey === undefined) return;
@@ -54,6 +57,7 @@ export function YearChart({ data }: YearChartProps) {
               stroke="#64748b"
               tickFormatter={(v: number) => `${Math.round(v / 1000)}k`}
             />
+            {hasNegativeAhorro && <ReferenceLine y={0} stroke="#94a3b8" />}
             <Tooltip
               formatter={(value: number) => formatEur(value)}
               contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }}

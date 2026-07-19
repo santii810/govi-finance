@@ -7,7 +7,7 @@ import {
   RuleError,
   updateImportRule,
 } from "@/lib/import-rules-store";
-import { parseJsonField } from "@/lib/import-rules/engine";
+import { parseJsonField, normalizePersona } from "@/lib/import-rules/engine";
 import type { ImportRuleInput } from "@/lib/import-rules/types";
 import { NocoDbClient } from "@/lib/nocodb";
 import { getSession } from "@/lib/session";
@@ -39,6 +39,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     }
     if (body.actions !== undefined) {
       partial.actions = parseJsonField(body.actions);
+    }
+    if (body.persona !== undefined) {
+      partial.persona = normalizePersona(body.persona, session.user.persona);
     }
 
     if (partial.nombre !== undefined && !partial.nombre.trim()) {

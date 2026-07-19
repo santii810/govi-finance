@@ -138,10 +138,17 @@ def _from_official_export(row: dict[str, str]) -> RawMovement:
     name = row.get("name", "").strip()
     description = row.get("description", "").strip()
     amount = _parse_decimal(row.get("amount", "0"))
+    tax = _parse_decimal(row.get("tax", "") or "0")
     fecha = _parse_date_flexible(row.get("date", ""))
     tx_id = row.get("transaction_id", "").strip() or None
 
     metadata = _official_metadata(row)
+    # Cuenta remunerada: el export trae bruto en amount y retención en tax (negativa).
+    # Registramos el neto cobrado en cuenta.
+    if tx_type == "INTEREST_PAYMENT" and tax != 0:
+        metadata["amount_gross"] = format(amount, "f")
+        amount = amount + tax
+
     concepto = _build_concepto_official(tx_type, category, name, description)
 
     return RawMovement(

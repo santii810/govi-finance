@@ -11,9 +11,19 @@ TABLES = {
 
 SHEETS = {
     "gastos": "GastosExport",
+    "gastos_personales": "GastosPersonales",
     "ingresos": "Ingresos",
     "inversiones": "Inversión",
     "patrimonio": "Patrimonio",
+}
+
+# Entidades que escriben en una tabla distinta a su nombre lógico.
+ENTITY_TABLE = {
+    "gastos": "gastos",
+    "gastos_personales": "gastos",
+    "ingresos": "ingresos",
+    "inversiones": "inversiones",
+    "patrimonio": "patrimonio",
 }
 
 INVERSION_TIPO_MAP = {

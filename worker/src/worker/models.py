@@ -71,14 +71,14 @@ class ImportPreview:
             for item in self.ambiguedades:
                 lines.append(f"    - {item}")
         if self.ejemplos:
-            lines.extend(["", "  Ejemplos:"])
-            for mov in self.ejemplos[:3]:
-                sign = "+" if mov.importe > 0 else ""
-                extra = _format_metadata_hint(mov.metadata)
-                suffix = f"  [{extra}]" if extra else ""
-                lines.append(
-                    f"    {mov.fecha:%d/%m}  {sign}{mov.importe:.2f} €  {mov.concepto[:50]}{suffix}"
-                )
+            lines.extend(["", "  Movimientos:"])
+            lines.append("    Primeros:")
+            for mov in self.ejemplos[:2]:
+                lines.append(f"    {_format_movimiento_line(mov)}")
+            if self.total_movimientos > 2:
+                lines.append("    Últimos:")
+                for mov in self.ejemplos[-2:]:
+                    lines.append(f"    {_format_movimiento_line(mov)}")
         lines.extend(["", "¿Confirmas la interpretación?", ""])
         return "\n".join(lines)
 
@@ -95,6 +95,13 @@ class ImportPreview:
             return value
 
         return convert(asdict(self))
+
+
+def _format_movimiento_line(mov: ClassifiedMovement) -> str:
+    sign = "+" if mov.importe > 0 else ""
+    extra = _format_metadata_hint(mov.metadata)
+    suffix = f"  [{extra}]" if extra else ""
+    return f"{mov.fecha:%d/%m}  {sign}{mov.importe:.2f} €  {mov.concepto[:50]}{suffix}"
 
 
 def _format_metadata_hint(metadata: dict[str, str]) -> str:

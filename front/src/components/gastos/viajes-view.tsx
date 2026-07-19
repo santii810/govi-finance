@@ -12,6 +12,7 @@ import {
   YAxis,
 } from "recharts";
 import { colorMapForKeys } from "@/components/gastos/colors";
+import { GastosMetricCard } from "@/components/gastos/gastos-metric-card";
 import { TotalApuntadoCard } from "@/components/gastos/total-apuntado-card";
 import { useGastosDrilldown } from "@/components/gastos/use-gastos-drilldown";
 import { SwitchableDistributionChart } from "@/components/ingresos/switchable-distribution-chart";
@@ -26,7 +27,7 @@ interface ViajesViewProps {
 }
 
 export function ViajesView({ data, filterQuery }: ViajesViewProps) {
-  const { selection, moves, loading, error, openCell, close } = useGastosDrilldown({
+  const { selection, moves, loading, error, openCell, close, reload } = useGastosDrilldown({
     filterQuery,
     view: "viajes",
   });
@@ -34,6 +35,16 @@ export function ViajesView({ data, filterQuery }: ViajesViewProps) {
     (sum, block) => sum + block.trips.reduce((s, t) => s + t.total, 0),
     0,
   );
+  const allTrips = data.tripsByYear.flatMap((block) => block.trips);
+  const avgPerTrip = data.tripCount > 0 ? data.total / data.tripCount : null;
+  const cheapestTrip =
+    allTrips.length > 0
+      ? allTrips.reduce((min, trip) => (trip.total < min.total ? trip : min), allTrips[0]!)
+      : null;
+  const priciestTrip =
+    allTrips.length > 0
+      ? allTrips.reduce((max, trip) => (trip.total > max.total ? trip : max), allTrips[0]!)
+      : null;
   const ubicColors = colorMapForKeys(data.ubicacionKeys);
 
   return (
@@ -46,16 +57,46 @@ export function ViajesView({ data, filterQuery }: ViajesViewProps) {
           error={error}
           labelHeader="Destino"
           onClose={close}
+          editable
+          onAfterSave={() => void reload()}
         />
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <TotalApuntadoCard total={data.total} ytdComparison={data.ytdComparison} />
-        <div className="rounded-2xl border border-border bg-card p-5 text-center shadow-sm">
+        <GastosMetricCard centered>
           <p className="text-sm font-medium text-muted">Viajes</p>
           <p className="mt-2 text-3xl font-semibold tracking-tight">{data.tripCount}</p>
           <p className="mt-2 text-xs text-muted">en el período</p>
-        </div>
+        </GastosMetricCard>
+        <GastosMetricCard centered>
+          <p className="text-sm font-medium text-muted">Gasto medio por viaje</p>
+          <p className="mt-2 text-3xl font-semibold tracking-tight text-expense">
+            {avgPerTrip != null ? formatEur(avgPerTrip) : "—"}
+          </p>
+        </GastosMetricCard>
+        <GastosMetricCard centered>
+          {priciestTrip && cheapestTrip ? (
+            <div className="grid w-full grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-xs text-muted">Más caro</p>
+                <p className="font-semibold text-expense tabular-nums">{formatEur(priciestTrip.total)}</p>
+                <p className="truncate text-xs text-muted" title={priciestTrip.nombre}>
+                  {priciestTrip.nombre}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted">Más barato</p>
+                <p className="font-semibold tabular-nums">{formatEur(cheapestTrip.total)}</p>
+                <p className="truncate text-xs text-muted" title={cheapestTrip.nombre}>
+                  {cheapestTrip.nombre}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-2 text-3xl font-semibold tracking-tight">—</p>
+          )}
+        </GastosMetricCard>
       </div>
 
       {data.stackedByYear.length > 0 && (

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { MetricsGrid } from "@/components/metric-card";
+import { IncomeRatiosSection } from "@/components/ingresos/income-ratios-section";
 import { YearChart } from "@/components/year-chart";
 import type { ResumenData } from "@/lib/types";
 
@@ -47,6 +48,7 @@ export function DashboardResumen() {
     <div className="space-y-6">
       <MetricsGrid metrics={data.metrics} />
       <YearChart data={data.chart} />
+      <IncomeRatiosSection ratios={data.ratios} />
     </div>
   );
 }

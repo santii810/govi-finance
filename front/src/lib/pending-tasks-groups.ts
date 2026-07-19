@@ -1,5 +1,6 @@
 import { parseDate } from "@/lib/persona";
 import type { ClassifiedPending } from "@/lib/import-rules/types";
+import { isSinClasificar } from "@/lib/pending-classification";
 
 export type TipoMovimiento = "ingreso" | "gasto" | "inversion" | "transferencia" | "otro";
 
@@ -106,28 +107,37 @@ export interface PendingReglaGroup {
 }
 
 export function isSinCategorizar(item: ClassifiedPending): boolean {
-  return !item.ignorar && !item.reglaId && !item.tablaDestino;
+  return isSinClasificar(item);
 }
 
 export function getReglaGroupKey(item: ClassifiedPending): string {
+  if (isSinClasificar(item)) return "__sin_categorizar__";
   if (item.reglaId) return `rule:${item.reglaId}`;
   return "__sin_categorizar__";
 }
 
 export function getReglaGroupLabel(item: ClassifiedPending): string {
+  if (isSinClasificar(item)) return "Sin clasificar";
   if (item.reglaNombre) return item.reglaNombre;
-  return "Sin categorizar";
+  return "Sin clasificar";
 }
 
 function describeGroupDestino(item: ClassifiedPending): string {
   if (item.ignorar) return "Transferencia (ignorar)";
-  if (isSinCategorizar(item)) return "Asigna destino antes de guardar";
+  if (isSinClasificar(item)) {
+    if (item.tablaDestino) return `${item.tablaDestino} — elige categoría`;
+    return "Asigna destino y categoría";
+  }
   if (item.tablaDestino === "Inversiones") {
     const parts = [item.tipo, item.nombre].filter(Boolean).join(" · ");
     return parts ? `Inversiones — ${parts}` : "Inversiones";
   }
   if (item.tablaDestino === "Gastos" && item.categoria) {
     return `Gastos — ${item.categoria}`;
+  }
+  if (item.tablaDestino === "Ingresos" && item.categoria) {
+    const parts = [item.categoria, item.notas].filter(Boolean).join(" · ");
+    return parts ? `Ingresos — ${parts}` : "Ingresos";
   }
   return item.tablaDestino ?? "Sin destino";
 }

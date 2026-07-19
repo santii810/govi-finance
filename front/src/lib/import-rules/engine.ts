@@ -12,6 +12,9 @@ function applyBaseline(movement: PendingMovement): Classification {
   return {
     tablaDestino: null,
     ignorar: false,
+    destino: null,
+    origen: null,
+    notas: null,
     categoria: null,
     tipo: null,
     nombre: null,
@@ -21,8 +24,72 @@ function applyBaseline(movement: PendingMovement): Classification {
   };
 }
 
+function extractDestinoFromContains(concepto: string, needle: string): string {
+  const idx = concepto.toLowerCase().indexOf(needle.toLowerCase());
+  if (idx === -1) return needle.trim();
+  return concepto.slice(idx, idx + needle.length).trim();
+}
+
+function conceptoExactoValues(exact: string | string[]): string[] {
+  return Array.isArray(exact) ? exact : [exact];
+}
+
+function matchesConceptoExacto(concepto: string, exact: string | string[]): boolean {
+  const normalized = normalizeConcepto(concepto);
+  return conceptoExactoValues(exact).some((value) => normalized === normalizeConcepto(value));
+}
+
+function conceptoContieneValues(contains: string | string[]): string[] {
+  return Array.isArray(contains) ? contains : [contains];
+}
+
+function matchesConceptoContiene(concepto: string, contains: string | string[]): boolean {
+  const lower = concepto.toLowerCase();
+  return conceptoContieneValues(contains).some((needle) => lower.includes(needle.toLowerCase()));
+}
+
+function inferDestinoFromCondition(
+  concepto: string,
+  condition: RuleCondition,
+  actions: RuleActions,
+): string | undefined {
+  if (actions.destino !== undefined) return actions.destino.trim() || undefined;
+  const contains = condition.concepto_contiene;
+  if (contains) {
+    const matched = conceptoContieneValues(contains).find((needle) =>
+      concepto.toLowerCase().includes(needle.toLowerCase()),
+    );
+    if (matched) return extractDestinoFromContains(concepto, matched);
+  }
+  const exact = condition.concepto_exacto;
+  if (exact) {
+    const matched = conceptoExactoValues(exact).find(
+      (value) => normalizeConcepto(concepto) === normalizeConcepto(value),
+    );
+    if (matched) return extractDestinoFromContains(concepto, matched);
+  }
+  return undefined;
+}
+
 export function normalizeConcepto(value: string): string {
   return value.trim().toLowerCase();
+}
+
+/** Normaliza condiciones leídas de NocoDB (p. ej. concepto_contiene serializado como string). */
+export function normalizeRuleCondition(condition: RuleCondition): RuleCondition {
+  const out: RuleCondition = { ...condition };
+  const contains = out.concepto_contiene;
+  if (typeof contains === "string" && contains.trim().startsWith("[")) {
+    try {
+      const parsed: unknown = JSON.parse(contains);
+      if (Array.isArray(parsed)) {
+        out.concepto_contiene = parsed.map((value) => String(value));
+      }
+    } catch {
+      /* mantener string */
+    }
+  }
+  return out;
 }
 
 function matchConceptoRegex(concepto: string, pattern: string): RegExpMatchArray | null {
@@ -73,9 +140,21 @@ export function applyRulesWithMeta(
     if (extractedNombre !== null && actions.nombre === undefined) {
       actions = { ...actions, nombre: extractedNombre };
     }
+    const inferredDestino = inferDestinoFromCondition(movement.concepto, rule.condition, actions);
+    const tablaTrasRegla = actions.tabla_destino ?? classified.tablaDestino;
+    if (
+      inferredDestino !== undefined &&
+      actions.destino === undefined &&
+      actions.origen === undefined &&
+      tablaTrasRegla === "Gastos"
+    ) {
+      actions = { ...actions, destino: inferredDestino };
+    }
     classified = applyActions(classified, actions);
     lastMatched = rule;
   }
+
+  classified = applyDividendNotasFallback(classified, movement);
 
   return {
     classification: classified,
@@ -83,6 +162,22 @@ export function applyRulesWithMeta(
     reglaNombre: lastMatched?.nombre ?? null,
     reglaPrioridad: lastMatched?.priority ?? -1,
   };
+}
+
+function applyDividendNotasFallback(
+  classified: Classification,
+  movement: PendingMovement,
+): Classification {
+  if (classified.tablaDestino !== "Ingresos" || classified.notas?.trim()) {
+    return classified;
+  }
+  const origen = classified.origen?.trim();
+  if (origen !== "Dividendos" && origen !== "Cashback") {
+    return classified;
+  }
+  const name = movement.metadata.name?.trim();
+  if (!name) return classified;
+  return { ...classified, notas: name };
 }
 
 function ruleMatches(rule: ImportRule, movement: PendingMovement, accountId: string): boolean {
@@ -99,12 +194,12 @@ function ruleMatches(rule: ImportRule, movement: PendingMovement, accountId: str
   }
 
   const exact = condition.concepto_exacto;
-  if (exact && normalizeConcepto(movement.concepto) !== normalizeConcepto(exact)) {
+  if (exact && !matchesConceptoExacto(movement.concepto, exact)) {
     return false;
   }
 
   const contains = condition.concepto_contiene;
-  if (contains && !movement.concepto.toLowerCase().includes(contains.toLowerCase())) {
+  if (contains && !matchesConceptoContiene(movement.concepto, contains)) {
     return false;
   }
 
@@ -145,7 +240,24 @@ function applyActions(classified: Classification, actions: RuleActions): Classif
   const ignorar = actions.ignorar === true ? true : classified.ignorar;
   const tablaDestino = actions.tabla_destino ?? classified.tablaDestino;
   const persona = actions.persona ?? classified.persona;
+
+  let destino = classified.destino;
+  let origen = classified.origen;
+
+  if (actions.origen !== undefined) {
+    origen = actions.origen || null;
+  }
+  if (actions.destino !== undefined) {
+    const label = actions.destino || null;
+    if (tablaDestino === "Ingresos") {
+      origen = label;
+    } else {
+      destino = label;
+    }
+  }
+
   const categoria = actions.categoria !== undefined ? actions.categoria : classified.categoria;
+  const notas = actions.notas !== undefined ? actions.notas || null : classified.notas;
   const tipo = actions.tipo !== undefined ? actions.tipo : classified.tipo;
   const nombre = actions.nombre !== undefined ? actions.nombre : classified.nombre;
   const entidad = actions.entidad !== undefined ? actions.entidad : classified.entidad;
@@ -159,7 +271,19 @@ function applyActions(classified: Classification, actions: RuleActions): Classif
     importe = importe * -1;
   }
 
-  return { tablaDestino, ignorar, persona, categoria, tipo, nombre, entidad, importe };
+  return {
+    tablaDestino,
+    ignorar,
+    destino,
+    origen,
+    notas,
+    persona,
+    categoria,
+    tipo,
+    nombre,
+    entidad,
+    importe,
+  };
 }
 
 export function parseJsonField<T>(value: unknown): T {

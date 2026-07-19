@@ -5,8 +5,9 @@ export type RuleScope = "global" | "account";
 export interface RuleCondition {
   importe_positivo?: boolean;
   importe_negativo?: boolean;
-  concepto_contiene?: string;
-  concepto_exacto?: string;
+  concepto_contiene?: string | string[];
+  /** Un concepto o varios (match exacto, trim + case-insensitive). */
+  concepto_exacto?: string | string[];
   /** Expresión regular sobre Concepto; grupo captura → nombre si Acciones.nombre no está fijado. */
   concepto_regex?: string;
   /** Índice del grupo capturador para nombre (default 1). */
@@ -23,6 +24,12 @@ export interface RuleActions {
   tabla_destino?: TablaDestino;
   /** Movimiento interno (transferencia); no registrar como ingreso/gasto. */
   ignorar?: boolean;
+  /** Etiqueta en Gastos.Destino; si no se indica, se infiere de concepto_contiene/exacto. */
+  destino?: string;
+  /** Valor en Ingresos.Origen. */
+  origen?: string;
+  /** Texto en Ingresos.Notas (p. ej. emisor del dividendo). */
+  notas?: string;
   categoria?: string;
   tipo?: string;
   nombre?: string;
@@ -59,6 +66,12 @@ export interface PendingMovement {
 export interface Classification {
   tablaDestino: TablaDestino | null;
   ignorar: boolean;
+  /** Etiqueta propuesta para Gastos.Destino (p. ej. «Lidl» en vez del concepto bancario). */
+  destino: string | null;
+  /** Valor propuesto para Ingresos.Origen. */
+  origen: string | null;
+  /** Texto propuesto para Ingresos.Notas. */
+  notas: string | null;
   categoria: string | null;
   tipo: string | null;
   nombre: string | null;
@@ -75,6 +88,9 @@ export interface ClassifiedPending extends PendingMovement {
   reglaNombre: string | null;
   reglaPrioridad: number;
   tablaDestino: TablaDestino | null;
+  destino: string | null;
+  origen: string | null;
+  notas: string | null;
   categoria: string | null;
   tipo: string | null;
   nombre: string | null;
@@ -84,11 +100,11 @@ export interface ClassifiedPending extends PendingMovement {
 /** Destino en formulario de reglas (incluye transferencias a ignorar). */
 export type DestinoRegla = TablaDestino | "__ignorar__";
 
-export type ConditionKind = "exacto" | "contiene" | "importe_positivo" | "importe_negativo";
+export type ConditionKind = "exacto" | "contiene" | "regex" | "importe_positivo" | "importe_negativo";
 
 export interface ImportRuleInput {
   nombre: string;
-  /** Ignorado en la API: siempre se asigna la Persona del usuario logueado. */
+  /** Personal (usuario logueado) o Común (ambos). Validado en la API. */
   persona?: PersonaValue;
   activa: boolean;
   alcance: RuleScope;

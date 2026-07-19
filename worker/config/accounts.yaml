@@ -8,6 +8,15 @@ accounts:
     detection:
       parser: trade_republic
 
+  - id: trade-republic-sandra
+    label: "Trade Republic — Sandra (personal)"
+    banco: Trade Republic
+    tipo: personal
+    persona: Sandra
+    parser: trade_republic
+    detection:
+      parser: trade_republic
+
   - id: revolut-santi
     label: "Revolut — Santi (personal)"
     banco: Revolut
@@ -31,6 +40,15 @@ accounts:
     banco: MyInvestor
     tipo: personal
     persona: Santi
+    parser: myinvestor
+    detection:
+      parser: myinvestor
+
+  - id: myinvestor-sandra
+    label: "MyInvestor — Sandra (personal)"
+    banco: MyInvestor
+    tipo: personal
+    persona: Sandra
     parser: myinvestor
     detection:
       parser: myinvestor

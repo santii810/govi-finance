@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { DistributionPie } from "@/components/ingresos/distribution-pie";
-import { HorizontalBarChart } from "@/components/ingresos/horizontal-bar-chart";
+import { SwitchableDistributionChart } from "@/components/ingresos/switchable-distribution-chart";
 import { IngresosLineChart } from "@/components/ingresos/line-chart";
 import { YearFilter } from "@/components/ingresos/year-filter";
 import { GroupedTipoBarChart, InmobiliarioBarChart } from "@/components/patrimonio/grouped-bar-charts";
@@ -121,24 +120,36 @@ export function DashboardPatrimonio() {
           />
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <HorizontalBarChart title="Diversificación por tipo (€)" data={data.byTipo} color="#2563eb" />
-          <DistributionPie title="Diversificación por tipo (%)" data={data.byTipo} />
-        </div>
+        <SwitchableDistributionChart
+          title="Diversificación por tipo"
+          data={data.byTipo}
+          color="#2563eb"
+          defaultView="bar"
+        />
 
         {(data.rentaVariableByNombre.length > 0 || data.inmobiliario.length > 0) && (
           <div className="grid gap-4 lg:grid-cols-2">
             {data.rentaVariableByNombre.length > 0 && (
-              <HorizontalBarChart
+              <SwitchableDistributionChart
                 title="Renta variable por activo"
                 data={data.rentaVariableByNombre}
                 color="#2563eb"
+                defaultView="bar"
               />
             )}
             {data.inmobiliario.length > 0 && (
               <InmobiliarioBarChart title="Inmobiliario por activo" data={data.inmobiliario} />
             )}
           </div>
+        )}
+
+        {data.accionesByEmpresa.length > 0 && (
+          <SwitchableDistributionChart
+            title="Acciones por entidad"
+            data={data.accionesByEmpresa}
+            color="#2563eb"
+            defaultView="bar"
+          />
         )}
 
         {data.inmobiliario.length > 0 && (

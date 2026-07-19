@@ -9,6 +9,7 @@ import {
   parseDate,
   personaFilter,
   yearBoundsIso,
+  type DateParts,
 } from "./persona";
 import { resolvePeriodFilterRange } from "./period-filter";
 import { buildPivotDetails, formatPivotDate, type PivotDrilldownMove } from "./pivot-drilldown";
@@ -17,6 +18,7 @@ import type {
   IngresosHeatmapRow,
   IngresosPivotRow,
   IngresosYearPoint,
+  GastosYtdComparison,
   InversionesData,
   InversionesFilterMode,
   NamedAmount,
@@ -32,6 +34,7 @@ interface InversionRecord {
   year: string;
   monthIndex: number;
   monthKey: string;
+  day: number;
 }
 
 function mapInversiones(records: Record<string, unknown>[], timezone: string): InversionRecord[] {
@@ -49,6 +52,7 @@ function mapInversiones(records: Record<string, unknown>[], timezone: string): I
         year: parts.year,
         monthIndex: parts.monthIndex,
         monthKey: parts.monthKey,
+        day: parts.day,
       };
     })
     .filter((r): r is InversionRecord => r !== null);
@@ -140,19 +144,72 @@ function buildPivot(
   return { entidadKeys, rows, details: buildPivotDetails(entries) };
 }
 
-function buildHeatmap(records: InversionRecord[]): IngresosHeatmapRow[] {
+const HEATMAP_MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+function buildHeatmap(
+  records: InversionRecord[],
+  timezone: string,
+): { rows: IngresosHeatmapRow[]; details: Record<string, PivotDrilldownMove[]> } {
   const grid = new Map<string, number[]>();
+  const entries: Array<{ rowKey: string; colKey: string; ts: number; move: PivotDrilldownMove }> = [];
 
   for (const r of records) {
     const y = r.year;
     if (!grid.has(y)) grid.set(y, Array(12).fill(0));
     const months = grid.get(y)!;
     months[r.monthIndex] += r.amount;
+    entries.push({
+      rowKey: y,
+      colKey: HEATMAP_MONTHS[r.monthIndex],
+      ts: r.date.getTime(),
+      move: {
+        date: formatPivotDate(r.date, timezone),
+        label: r.nombre,
+        amount: r.amount,
+        meta: r.entidad,
+      },
+    });
   }
 
-  return [...grid.entries()]
+  const rows = [...grid.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([year, months]) => ({ year, months }));
+
+  return { rows, details: buildPivotDetails(entries) };
+}
+
+function isWithinYtdCutoff(record: InversionRecord, year: string, refParts: DateParts): boolean {
+  if (record.year !== year) return false;
+  return (
+    record.monthIndex < refParts.monthIndex ||
+    (record.monthIndex === refParts.monthIndex && record.day <= refParts.day)
+  );
+}
+
+function sumYtd(records: InversionRecord[], year: string, refParts: DateParts): number {
+  return records
+    .filter((r) => isWithinYtdCutoff(r, year, refParts))
+    .reduce((sum, r) => sum + r.amount, 0);
+}
+
+function buildYtdComparison(
+  records: InversionRecord[],
+  refParts: DateParts,
+  refYear: string,
+  availableYears: string[],
+): GastosYtdComparison | null {
+  const prevYear = String(Number(refYear) - 1);
+  if (!availableYears.includes(prevYear)) return null;
+
+  const currentYtd = sumYtd(records, refYear, refParts);
+  const previousYtd = sumYtd(records, prevYear, refParts);
+  const delta = currentYtd - previousYtd;
+  const abs = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 0 }).format(Math.abs(delta));
+  let label: string;
+  if (delta > 0) label = `+${abs} € vs año pasado a hoy`;
+  else if (delta < 0) label = `−${abs} € vs año pasado a hoy`;
+  else label = `±0 € vs año pasado a hoy`;
+  return { delta, label };
 }
 
 function monthlyAverage(records: InversionRecord[]): number {
@@ -180,9 +237,13 @@ export async function fetchInversiones(
 
   const filter = resolveFilterRange(mode, timezone, availableYears, yearFrom, yearTo);
   const currentYear = currentYearKey(timezone);
-  const fetchFrom = String(Math.min(Number(filter.from), Number(currentYear)));
-  const fetchTo = String(Math.max(Number(filter.to), Number(currentYear)));
-  const { from: apiFrom, to: apiTo } = yearBoundsIso(fetchFrom, fetchTo);
+  const prevYear = String(Number(currentYear) - 1);
+  let fetchFrom = Math.min(Number(filter.from), Number(currentYear));
+  if (availableYears.includes(prevYear)) {
+    fetchFrom = Math.min(fetchFrom, Number(prevYear));
+  }
+  const fetchTo = Math.max(Number(filter.to), Number(currentYear));
+  const { from: apiFrom, to: apiTo } = yearBoundsIso(String(fetchFrom), String(fetchTo));
 
   const raw = await client.listRecords(TABLES.inversiones, {
     where,
@@ -192,9 +253,10 @@ export async function fetchInversiones(
   });
   const all = mapInversiones(raw, timezone);
   const filtered = filterByYears(all, filter.from, filter.to);
-  const currentYearTotal = all
-    .filter((r) => r.year === currentYear)
-    .reduce((sum, r) => sum + r.amount, 0);
+  const refParts = getDateParts(new Date(), timezone);
+  const currentYearTotal = sumYtd(all, currentYear, refParts);
+  const ytdComparison = buildYtdComparison(all, refParts, currentYear, availableYears);
+  const heatmapData = buildHeatmap(filtered, timezone);
 
   return {
     metrics: {
@@ -202,13 +264,15 @@ export async function fetchInversiones(
       currentYearTotal,
       monthlyAverage: monthlyAverage(filtered),
     },
+    ytdComparison,
     availableYears,
     yearlyLine: sumByYear(filtered),
     byEntidad: sumByField(filtered, "entidad"),
     byTipo: sumByField(filtered, "tipo"),
     byNombre: sumByField(filtered, "nombre"),
     pivot: buildPivot(filtered, timezone),
-    heatmap: buildHeatmap(filtered),
+    heatmap: heatmapData.rows,
+    heatmapDetails: heatmapData.details,
     filter: { mode, ...filter },
   };
 }

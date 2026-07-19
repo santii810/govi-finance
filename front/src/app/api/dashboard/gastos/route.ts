@@ -13,13 +13,14 @@ const VALID_SUB_TABS = new Set<GastosSubTab>([
   "piso",
   "viajes",
   "restauracion",
+  "transporte",
 ]);
 
 function parseSubTab(value: string | null): GastosSubTab {
   if (value && VALID_SUB_TABS.has(value as GastosSubTab)) {
     return value as GastosSubTab;
   }
-  return "vida";
+  return "general";
 }
 
 export async function GET(req: NextRequest) {

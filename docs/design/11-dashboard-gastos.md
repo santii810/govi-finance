@@ -17,6 +17,8 @@ Barra lateral dentro del área de Gastos, en dos bloques:
 | **Vistas** | Totales · Gastos de vida |
 | **Por categoría** | Supermercado · Piso · Viaxes · Restauración · *(futuras)* |
 
+Al entrar en Gastos, la vista activa por defecto es **Totales**.
+
 ### Vista «Totales»
 Todas las categorías con gasto en el período filtrado.
 

@@ -1,8 +1,17 @@
+import type { GastosRowInput } from "./manual-insert/types";
+
 export interface PivotDrilldownMove {
   date: string;
   label: string;
   amount: number;
   meta?: string;
+  tipo?: string;
+  origen?: string;
+  notas?: string;
+  /** Id NocoDB cuando el movimiento se puede editar (p. ej. Gastos drilldown). */
+  recordId?: string;
+  /** Borrador de campos editables de Gastos (importe real en BD, sin atribución). */
+  gastosEdit?: GastosRowInput;
 }
 
 export function pivotDetailKey(row: string, col: string): string {

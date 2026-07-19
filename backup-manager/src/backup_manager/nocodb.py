@@ -30,8 +30,17 @@ class NocoDbClient:
         *,
         limit: int = 1000,
         offset: int = 0,
+        sort: str | None = None,
+        fields: list[str] | None = None,
     ) -> list[dict[str, Any]]:
-        params = {"limit": str(limit), "offset": str(offset)}
+        params: dict[str, str] = {
+            "limit": str(limit),
+            "offset": str(offset),
+        }
+        if sort:
+            params["sort"] = sort
+        if fields:
+            params["fields"] = ",".join(fields)
         data = await self._request(
             "GET",
             f"/api/v2/tables/{table_id}/records?{urllib.parse.urlencode(params)}",
@@ -51,6 +60,74 @@ class NocoDbClient:
                 break
             offset += limit
         return rows
+
+    async def fetch_all_record_ids(self, table_id: str) -> list[Any]:
+        ids: list[Any] = []
+        offset = 0
+        limit = 1000
+        while True:
+            batch = await self.list_records(
+                table_id,
+                limit=limit,
+                offset=offset,
+                fields=["Id"],
+            )
+            if not batch:
+                break
+            ids.extend(row.get("Id") for row in batch if row.get("Id") is not None)
+            if len(batch) < limit:
+                break
+            offset += limit
+        return ids
+
+    async def count_records(self, table_id: str) -> int:
+        params = {"limit": "1", "offset": "0", "fields": "Id"}
+        data = await self._request(
+            "GET",
+            f"/api/v2/tables/{table_id}/records?{urllib.parse.urlencode(params)}",
+        )
+        page_info = data.get("pageInfo", {})
+        return int(page_info.get("totalRows", len(data.get("list", []))))
+
+    async def get_change_marker(self, table_id: str) -> dict[str, Any]:
+        rows = await self.count_records(table_id)
+        latest = await self.list_records(
+            table_id,
+            limit=1,
+            offset=0,
+            sort="-UpdatedAt",
+            fields=["UpdatedAt"],
+        )
+        updated_at = latest[0].get("UpdatedAt") if latest else None
+        return {"rows": rows, "updated_at": updated_at}
+
+    async def delete_records(self, table_id: str, ids: list[Any]) -> None:
+        if not ids:
+            return
+        payload = [{"Id": record_id} for record_id in ids]
+        await self._request(
+            "DELETE",
+            f"/api/v2/tables/{table_id}/records",
+            json=payload,
+        )
+
+    async def create_records(
+        self,
+        table_id: str,
+        records: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        if not records:
+            return []
+        data = await self._request(
+            "POST",
+            f"/api/v2/tables/{table_id}/records",
+            json=records,
+        )
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict) and "list" in data:
+            return list(data["list"])
+        return [data]
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         headers = {"xc-token": self.token, "Content-Type": "application/json"}

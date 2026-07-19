@@ -4,7 +4,7 @@ from pathlib import Path
 
 from worker.accounts import load_accounts, resolve_account
 from worker.idempotency import build_idempotency_key
-from worker.models import ClassifiedMovement, ImportPreview
+from worker.models import ClassifiedMovement, ImportPreview, Persona
 from worker.parsers.registry import detect_parser, parse
 
 
@@ -12,22 +12,26 @@ def analyze_file(
     path: Path,
     *,
     account_id: str | None = None,
+    accounts: list | None = None,
+    sender_persona: Persona | None = None,
 ) -> tuple[ImportPreview, list[ClassifiedMovement]]:
     """Parsea y detecta cuenta. No aplica ImportRules (las aplica la web)."""
     parser_name = detect_parser(path)
     if parser_name is None:
         raise ValueError("No se reconoce el formato del export")
 
-    accounts = load_accounts()
+    catalog = accounts if accounts is not None else load_accounts()
     if account_id:
-        account = next((a for a in accounts if a.id == account_id), None)
+        account = next((a for a in catalog if a.id == account_id), None)
         ambiguities: list[str] = []
         if account is None:
             raise ValueError(f"Cuenta desconocida: {account_id}")
     else:
-        account, ambiguities = resolve_account(accounts, parser_name)
+        account, ambiguities = resolve_account(
+            catalog, parser_name, sender_persona=sender_persona
+        )
         if account is None:
-            matches = [a for a in accounts if a.parser == parser_name]
+            matches = [a for a in catalog if a.parser == parser_name]
             if not matches:
                 preview = ImportPreview(
                     account_id="",
@@ -84,7 +88,11 @@ def analyze_file(
         total_movimientos=len(parsed),
         gastos_count=gastos,
         ingresos_count=ingresos,
-        ejemplos=parsed[:5],
+        ejemplos=(
+            list(parsed)
+            if len(parsed) <= 4
+            else parsed[:2] + parsed[-2:]
+        ),
         ambiguedades=ambiguities,
     )
     return preview, parsed

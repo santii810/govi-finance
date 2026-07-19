@@ -28,6 +28,7 @@ interface IngresoRecord {
   amount: number;
   origen: string;
   categoria: string;
+  notas: string;
   year: string;
   monthIndex: number;
   monthKey: string;
@@ -44,6 +45,7 @@ function mapIngresos(records: Record<string, unknown>[], timezone: string): Ingr
         amount: attributedAmount(parseAmount(r.Ingreso), r.Persona),
         origen: String(r.Origen ?? "Sin origen"),
         categoria: String(r.Categoría ?? r.Categoria ?? "Sin categoría"),
+        notas: String(r.Notas ?? "").trim(),
         year: parts.year,
         monthIndex: parts.monthIndex,
         monthKey: parts.monthKey,
@@ -87,6 +89,16 @@ function sumByField(records: IngresoRecord[], field: "origen" | "categoria"): Na
     .map(([name, total]) => ({ name, total }));
 }
 
+function ingresoPivotMove(record: IngresoRecord, timezone: string): PivotDrilldownMove {
+  return {
+    date: formatPivotDate(record.date, timezone),
+    label: record.categoria,
+    amount: record.amount,
+    origen: record.origen,
+    notas: record.notas || undefined,
+  };
+}
+
 function buildPivot(records: IngresoRecord[], timezone: string): {
   origenKeys: string[];
   rows: IngresosPivotRow[];
@@ -106,11 +118,7 @@ function buildPivot(records: IngresoRecord[], timezone: string): {
       rowKey: y,
       colKey: r.origen,
       ts: r.date.getTime(),
-      move: {
-        date: formatPivotDate(r.date, timezone),
-        label: r.categoria,
-        amount: r.amount,
-      },
+      move: ingresoPivotMove(r, timezone),
     });
   }
 
@@ -149,11 +157,7 @@ function buildHeatmap(
       rowKey: y,
       colKey: HEATMAP_MONTHS[r.monthIndex],
       ts: r.date.getTime(),
-      move: {
-        date: formatPivotDate(r.date, timezone),
-        label: r.categoria,
-        amount: r.amount,
-      },
+      move: ingresoPivotMove(r, timezone),
     });
   }
 

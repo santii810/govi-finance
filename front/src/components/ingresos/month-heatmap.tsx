@@ -17,7 +17,7 @@ interface MonthHeatmapProps {
 function cellBg(value: number, max: number, signed: boolean): string {
   const magnitude = signed ? Math.abs(value) : value;
   if (magnitude <= 0 || max <= 0) return "";
-  const intensity = 0.08 + (magnitude / max) * 0.45;
+  const intensity = (magnitude / max) * 0.52;
   const green = "rgba(22, 163, 74, ";
   const blue = "rgba(37, 99, 235, ";
   if (signed && value < 0) return `${blue}${intensity})`;

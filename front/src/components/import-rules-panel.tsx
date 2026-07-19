@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FieldOptions } from "@/app/api/automatic-actions/options/route";
+import { SearchableSelect } from "@/components/searchable-select";
 import {
   buildCondition,
   DEFAULT_PRIORITY,
@@ -30,12 +31,17 @@ interface ImportRulesPanelProps {
   onRulesChanged: () => void;
 }
 
+type RuleVisibilidad = "personal" | "comun";
+
 interface RuleFormState {
   nombre: string;
+  visibilidad: RuleVisibilidad;
   conditionKind: ConditionKind;
   conditionText: string;
   tablaDestino: DestinoRegla | "";
   categoria: string;
+  origen: string;
+  notas: string;
   tipo: string;
   nombreActivo: string;
   entidad: string;
@@ -49,10 +55,13 @@ interface RuleFormState {
 function emptyForm(): RuleFormState {
   return {
     nombre: "",
+    visibilidad: "personal",
     conditionKind: "exacto",
     conditionText: "",
     tablaDestino: "Inversiones",
     categoria: "",
+    origen: "",
+    notas: "",
     tipo: "",
     nombreActivo: "",
     entidad: "",
@@ -68,12 +77,15 @@ function formFromRule(rule: ImportRule): RuleFormState {
   const kind = inferConditionKind(rule.condition);
   return {
     nombre: rule.nombre,
+    visibilidad: rule.persona === "Común" ? "comun" : "personal",
     conditionKind: kind,
     conditionText: getConditionText(rule.condition),
     tablaDestino: isIgnorarRule(rule)
       ? "__ignorar__"
       : (rule.actions.tabla_destino ?? ""),
     categoria: rule.actions.categoria ?? "",
+    origen: rule.actions.origen ?? "",
+    notas: rule.actions.notas ?? "",
     tipo: rule.actions.tipo ?? "",
     nombreActivo: rule.actions.nombre ?? "",
     entidad: rule.actions.entidad ?? "",
@@ -94,6 +106,11 @@ function formToInput(form: RuleFormState): ImportRuleInput {
   if (form.tablaDestino === "Gastos" && form.categoria) {
     actions.categoria = form.categoria;
   }
+  if (form.tablaDestino === "Ingresos") {
+    if (form.categoria) actions.categoria = form.categoria;
+    if (form.origen) actions.origen = form.origen;
+    if (form.notas) actions.notas = form.notas;
+  }
   if (form.tablaDestino === "Inversiones") {
     if (form.tipo) actions.tipo = form.tipo;
     if (form.nombreActivo) actions.nombre = form.nombreActivo;
@@ -105,6 +122,7 @@ function formToInput(form: RuleFormState): ImportRuleInput {
 
   return {
     nombre: form.nombre.trim(),
+    persona: form.visibilidad === "comun" ? "Común" : undefined,
     activa: form.activa,
     alcance: form.alcance,
     cuenta: form.alcance === "account" ? form.cuenta.trim() || null : null,
@@ -185,6 +203,7 @@ export function ImportRulesPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nombre: input.nombre,
+          persona: input.persona,
           activa: input.activa,
           alcance: input.alcance,
           cuenta: input.cuenta,
@@ -289,6 +308,23 @@ export function ImportRulesPanel({
           </label>
 
           <label className="flex flex-col gap-1">
+            <span className="text-xs text-muted">Visibilidad</span>
+            <select
+              value={form.visibilidad}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  visibilidad: e.target.value as RuleVisibilidad,
+                }))
+              }
+              className="rounded-md border border-border bg-card px-3 py-2 text-sm"
+            >
+              <option value="personal">Personal (solo yo)</option>
+              <option value="comun">Común (ambos)</option>
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1">
             <span className="text-xs text-muted">Tipo de condición</span>
             <select
               value={form.conditionKind}
@@ -324,6 +360,8 @@ export function ImportRulesPanel({
                   ...f,
                   tablaDestino: e.target.value as DestinoRegla | "",
                   categoria: "",
+                  origen: "",
+                  notas: "",
                   tipo: "",
                   nombreActivo: "",
                   entidad: "",
@@ -344,19 +382,55 @@ export function ImportRulesPanel({
           {form.tablaDestino !== "__ignorar__" && form.tablaDestino === "Gastos" && (
             <label className="flex flex-col gap-1">
               <span className="text-xs text-muted">Categoría</span>
-              <select
+              <SearchableSelect
                 value={form.categoria}
-                onChange={(e) => setForm((f) => ({ ...f, categoria: e.target.value }))}
-                className="rounded-md border border-border bg-card px-3 py-2 text-sm"
-              >
-                <option value="">— sin categoría —</option>
-                {(fieldOptions?.categoriaGastos ?? []).map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+                onChange={(categoria) => setForm((f) => ({ ...f, categoria }))}
+                options={fieldOptions?.categoriaGastos ?? []}
+                allowCreate
+                emptyLabel="— sin categoría —"
+              />
             </label>
+          )}
+
+          {form.tablaDestino === "Ingresos" && (
+            <>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-muted">Origen</span>
+                <input
+                  type="text"
+                  list="origen-ingresos-options"
+                  value={form.origen}
+                  onChange={(e) => setForm((f) => ({ ...f, origen: e.target.value }))}
+                  placeholder="Dividendos"
+                  className="rounded-md border border-border bg-card px-3 py-2 text-sm"
+                />
+                <datalist id="origen-ingresos-options">
+                  {(fieldOptions?.origenIngresos ?? []).map((o) => (
+                    <option key={o} value={o} />
+                  ))}
+                </datalist>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-muted">Categoría</span>
+                <SearchableSelect
+                  value={form.categoria}
+                  onChange={(categoria) => setForm((f) => ({ ...f, categoria }))}
+                  options={fieldOptions?.categoriaIngresos ?? []}
+                  allowCreate
+                  emptyLabel="— sin categoría —"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-muted">Notas</span>
+                <input
+                  type="text"
+                  value={form.notas}
+                  onChange={(e) => setForm((f) => ({ ...f, notas: e.target.value }))}
+                  placeholder="p. ej. emisor del dividendo"
+                  className="rounded-md border border-border bg-card px-3 py-2 text-sm"
+                />
+              </label>
+            </>
           )}
 
           {form.tablaDestino === "Inversiones" && (
@@ -556,6 +630,11 @@ export function ImportRulesPanel({
                                 title={rule.active ? "Activa" : "Inactiva"}
                               />
                               <span className="font-medium">{rule.nombre}</span>
+                              {rule.persona === "Común" && (
+                                <span className="rounded bg-background px-1.5 py-0.5 text-xs text-muted">
+                                  Común
+                                </span>
+                              )}
                               <span className="text-xs text-muted">
                                 {rule.scope} · prioridad {rule.priority}
                                 {rule.actions.invertir_importe ? " · invierte signo" : ""}

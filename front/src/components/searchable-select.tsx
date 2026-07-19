@@ -12,6 +12,9 @@ interface SearchableSelectProps {
   emptyLabel?: string;
   placeholder?: string;
   className?: string;
+  hasError?: boolean;
+  allowCreate?: boolean;
+  createLabel?: (query: string) => string;
 }
 
 function matchesLike(option: string, query: string): boolean {
@@ -25,12 +28,21 @@ export function SearchableSelect({
   emptyLabel = "— sin categoría —",
   placeholder = "Buscar categoría…",
   className,
+  hasError = false,
+  allowCreate = false,
+  createLabel = (query) => `Crear «${query}»`,
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listId = useId();
+
+  const trimmedQuery = query.trim();
+  const canCreate =
+    allowCreate &&
+    trimmedQuery.length > 0 &&
+    !options.some((option) => option === trimmedQuery);
 
   const filtered = useMemo(() => {
     const q = query.trim();
@@ -71,6 +83,16 @@ export function SearchableSelect({
     setQuery(value);
   }
 
+  function handleEnter() {
+    if (canCreate) {
+      selectOption(trimmedQuery);
+      return;
+    }
+    if (open && filtered.length === 1) {
+      selectOption(filtered[0]);
+    }
+  }
+
   const inputValue = open ? query : value;
   const inputPlaceholder = open ? placeholder : value ? undefined : emptyLabel;
 
@@ -96,13 +118,17 @@ export function SearchableSelect({
             setQuery(value);
             inputRef.current?.blur();
           }
-          if (event.key === "Enter" && open && filtered.length === 1) {
+          if (event.key === "Enter") {
             event.preventDefault();
-            selectOption(filtered[0]);
+            handleEnter();
           }
         }}
         onBlur={handleBlur}
-        className={INPUT_CLASS}
+        className={
+          hasError
+            ? `${INPUT_CLASS} border-expense focus:ring-expense`
+            : INPUT_CLASS
+        }
       />
       {open && (
         <ul
@@ -110,6 +136,19 @@ export function SearchableSelect({
           role="listbox"
           className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-md border border-border bg-card py-1 shadow-lg"
         >
+          {canCreate && (
+            <li role="option" aria-selected={value === trimmedQuery}>
+              <button
+                type="button"
+                tabIndex={-1}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => selectOption(trimmedQuery)}
+                className="w-full px-3 py-1.5 text-left text-sm font-medium text-accent hover:bg-muted/40"
+              >
+                {createLabel(trimmedQuery)}
+              </button>
+            </li>
+          )}
           {showEmptyOption && (
             <li role="option" aria-selected={value === ""}>
               <button
@@ -140,7 +179,7 @@ export function SearchableSelect({
               </button>
             </li>
           ))}
-          {!showEmptyOption && filtered.length === 0 && (
+          {!canCreate && !showEmptyOption && filtered.length === 0 && (
             <li className="px-3 py-2 text-sm text-muted">Sin coincidencias</li>
           )}
         </ul>

@@ -1,5 +1,5 @@
 import { formatEur } from "@/lib/persona";
-import type { ResumenMetrics } from "@/lib/types";
+import type { GastosYtdComparison, ResumenMetrics } from "@/lib/types";
 
 interface MetricCardProps {
   title: string;
@@ -7,6 +7,8 @@ interface MetricCardProps {
   previous?: number;
   tone?: "default" | "expense" | "income";
   hideComparison?: boolean;
+  ytdComparison?: GastosYtdComparison | null;
+  ytdPositiveIsGood?: boolean;
 }
 
 export function MetricCard({
@@ -15,15 +17,31 @@ export function MetricCard({
   previous = 0,
   tone = "default",
   hideComparison = false,
+  ytdComparison = null,
+  ytdPositiveIsGood = false,
 }: MetricCardProps) {
   const valueClass =
     tone === "expense" ? "text-expense" : tone === "income" ? "text-income" : "text-foreground";
+
+  const ytdClass =
+    ytdComparison == null
+      ? "text-muted"
+      : ytdComparison.delta === 0
+        ? "text-muted"
+        : ytdPositiveIsGood
+          ? ytdComparison.delta > 0
+            ? "text-income"
+            : "text-muted"
+          : ytdComparison.delta > 0
+            ? "text-expense"
+            : "text-income";
 
   return (
     <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
       <p className="text-sm font-medium text-muted">{title}</p>
       <p className={`mt-2 text-3xl font-semibold tracking-tight ${valueClass}`}>{formatEur(value)}</p>
-      {!hideComparison && (
+      {ytdComparison && <p className={`mt-2 text-xs ${ytdClass}`}>{ytdComparison.label}</p>}
+      {!hideComparison && !ytdComparison && (
         <p className="mt-2 text-xs text-muted">Mes anterior: {formatEur(previous)}</p>
       )}
     </div>

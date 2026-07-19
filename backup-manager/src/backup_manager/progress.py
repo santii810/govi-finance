@@ -11,6 +11,7 @@ class BackupProgressSnapshot:
     percent: int
     phase: str
     message: str
+    operation: str = "idle"
     archive: str | None = None
     error: str | None = None
 
@@ -20,6 +21,7 @@ class BackupProgressSnapshot:
             "percent": self.percent,
             "phase": self.phase,
             "message": self.message,
+            "operation": self.operation,
             "archive": self.archive,
             "error": self.error,
         }
@@ -32,6 +34,7 @@ class BackupProgress:
         self._percent = 0
         self._phase = "idle"
         self._message = ""
+        self._operation = "idle"
         self._archive: str | None = None
         self._error: str | None = None
 
@@ -42,6 +45,7 @@ class BackupProgress:
                 percent=self._percent,
                 phase=self._phase,
                 message=self._message,
+                operation=self._operation,
                 archive=self._archive,
                 error=self._error,
             )
@@ -52,7 +56,18 @@ class BackupProgress:
             self._percent = 0
             self._phase = "prepare"
             self._message = "Iniciando backup…"
+            self._operation = "backup"
             self._archive = None
+            self._error = None
+
+    def start_restore(self, archive_name: str) -> None:
+        with self._lock:
+            self._running = True
+            self._percent = 0
+            self._phase = "restore"
+            self._message = "Iniciando restauración…"
+            self._operation = "restore"
+            self._archive = archive_name
             self._error = None
 
     def update(self, percent: int, phase: str, message: str) -> None:
@@ -67,6 +82,17 @@ class BackupProgress:
             self._percent = 100
             self._phase = "done"
             self._message = "Backup completado"
+            self._operation = "backup"
+            self._archive = archive_name
+            self._error = None
+
+    def complete_restore(self, archive_name: str) -> None:
+        with self._lock:
+            self._running = False
+            self._percent = 100
+            self._phase = "done"
+            self._message = "Restauración completada"
+            self._operation = "restore"
             self._archive = archive_name
             self._error = None
 
@@ -76,6 +102,7 @@ class BackupProgress:
             self._percent = 10
             self._phase = "upload"
             self._message = "Subiendo a Google Drive…"
+            self._operation = "upload"
             self._archive = archive_name
             self._error = None
 
@@ -85,6 +112,7 @@ class BackupProgress:
             self._percent = 100
             self._phase = "uploaded"
             self._message = message
+            self._operation = "upload"
             self._archive = archive_name
             self._error = None
 
