@@ -67,6 +67,8 @@ services:
       ONEDRIVE_FOLDER_PATH: ${ONEDRIVE_FOLDER_PATH:-/Finanzas/backups}
       BACKUP_TRIGGER_SECRET: ${BACKUP_TRIGGER_SECRET}
       BACKUP_TRIGGER_PORT: ${BACKUP_TRIGGER_PORT:-8090}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_OWNER_USER_ID: ${TELEGRAM_OWNER_USER_ID:-}
     volumes:
       - backup_staging:/data/backups
     restart: always

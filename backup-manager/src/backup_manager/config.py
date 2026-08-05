@@ -25,6 +25,8 @@ class BackupConfig:
     onedrive_folder_path: str
     trigger_secret: str
     trigger_port: int
+    telegram_bot_token: str
+    telegram_owner_user_id: int | None
 
     @classmethod
     def from_env(cls) -> BackupConfig:
@@ -50,6 +52,9 @@ class BackupConfig:
         except ValueError as exc:
             raise RuntimeError("BACKUP_TRIGGER_PORT debe ser un entero") from exc
 
+        owner_raw = os.environ.get("TELEGRAM_OWNER_USER_ID", "").strip()
+        owner_user_id = int(owner_raw) if owner_raw else None
+
         return cls(
             nocodb_url=os.environ.get("NOCODB_URL", "http://nocodb:8080").rstrip("/"),
             nocodb_token=token,
@@ -69,4 +74,6 @@ class BackupConfig:
             onedrive_folder_path=os.environ.get("ONEDRIVE_FOLDER_PATH", "/Finanzas/backups").strip(),
             trigger_secret=os.environ.get("BACKUP_TRIGGER_SECRET", "").strip(),
             trigger_port=trigger_port,
+            telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", "").strip(),
+            telegram_owner_user_id=owner_user_id,
         )

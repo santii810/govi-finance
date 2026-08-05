@@ -11,6 +11,7 @@ from backup_manager.fingerprint import compute_fingerprint, save_fingerprint
 from backup_manager.nocodb import NocoDbClient
 from backup_manager.progress import BackupProgress, backup_progress
 from backup_manager.restore import restore_base
+from backup_manager.telegram_notify import is_telegram_configured, notify_auto_backup
 from backup_manager.upload import build_uploader
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,20 @@ async def run_backup(
         fingerprint = await compute_fingerprint(client, config.base_id)
         save_fingerprint(config.staging_dir, fingerprint)
         tracker.complete(archive_path.name)
+
+        if source == "auto":
+            if is_telegram_configured(
+                config.telegram_bot_token,
+                config.telegram_owner_user_id,
+            ):
+                await notify_auto_backup(
+                    token=config.telegram_bot_token,
+                    owner_user_id=config.telegram_owner_user_id,  # type: ignore[arg-type]
+                    archive_path=archive_path,
+                )
+            else:
+                logger.info("Telegram no configurado: se omite el envío del backup")
+
         return archive_path
     except Exception as exc:
         tracker.fail(str(exc))

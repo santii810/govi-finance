@@ -56,6 +56,14 @@ Variables:
 
 Reutiliza `NOCODB_URL` y `NOCODB_API_TOKEN` del compose raíz.
 
+## Telegram (backups automáticos)
+
+Si `TELEGRAM_BOT_TOKEN` y `TELEGRAM_OWNER_USER_ID` están definidos, tras cada backup **programado** exitoso el servicio envía el ZIP a ese chat (solo Santi).
+
+- Límite: 50 MB. Si el ZIP es mayor, envía un aviso de texto.
+- Los backups manuales (web/CLI) no se envían.
+- Un fallo de Telegram no marca el backup como fallido.
+
 ## Google Drive
 
 1. Crea un proyecto en [Google Cloud Console](https://console.cloud.google.com/).
